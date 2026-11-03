@@ -1,9 +1,16 @@
 ---
-import { getClientData } from '../lib/client';
+import { quoteHref, type SiteData } from '../lib/site';
 
-const client = getClientData();
-const quoteHref = (service: string) =>
-  `https://wa.me/${client.business.whatsapp}?text=${encodeURIComponent(`Olá! Quero solicitar um orçamento para ${service}.`)}`;
+interface Props {
+  site: SiteData;
+}
+
+const { site } = Astro.props;
+
+// Lista vazia = título "Nossos Serviços" sem nenhum card embaixo. A seção sai da página.
+if (site.services.length === 0) {
+  return;
+}
 ---
 
 <section class="bg-slate-950 py-24 md:py-32">
@@ -14,25 +21,34 @@ const quoteHref = (service: string) =>
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-14">
       {
-        client.services.map((service) => (
-          <div class="bg-slate-900 border border-slate-800 hover:border-emerald-500 hover:-translate-y-2 rounded-2xl p-8 flex flex-col justify-between transition duration-300">
-            <div>
-              <h3 class="font-display text-2xl font-semibold">{service.name}</h3>
-              <p class="text-sm text-slate-400 mt-3">{service.description}</p>
+        site.services.map((service) => {
+          const cta = quoteHref(site, service.name);
+
+          return (
+            <div class="bg-slate-900 border border-slate-800 hover:border-emerald-500 hover:-translate-y-2 rounded-2xl p-8 flex flex-col justify-between transition duration-300">
+              <div>
+                <h3 class="font-display text-2xl font-semibold">{service.name}</h3>
+                {service.description && <p class="text-sm text-slate-400 mt-3">{service.description}</p>}
+              </div>
+              <div class="mt-6">
+                {service.priceFrom && <p class="text-3xl font-display text-emerald-400 mt-4">{service.priceFrom}</p>}
+
+                {
+                  cta && (
+                    <a
+                      href={cta}
+                      aria-label={`Solicitar Orçamento para ${service.name}`}
+                      class="block mt-4 w-full py-3 bg-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--accent),black_18%)] text-white font-bold rounded-lg transition-colors text-center"
+                      style={`--accent: ${site.branding.accentColor}`}
+                    >
+                      Solicitar Orçamento
+                    </a>
+                  )
+                }
+              </div>
             </div>
-            <div class="mt-6">
-              <p class="text-3xl font-display text-emerald-400 mt-4">{service.priceFrom}</p>
-              <a
-                href={quoteHref(service.name)}
-                aria-label={`Solicitar Orçamento para ${service.name}`}
-                class="block mt-4 w-full py-3 bg-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--accent),black_18%)] text-white font-bold rounded-lg transition-colors text-center"
-                style={`--accent: ${client.branding.accentColor}`}
-              >
-                Solicitar Orçamento
-              </a>
-            </div>
-          </div>
-        ))
+          );
+        })
       }
     </div>
   </div>

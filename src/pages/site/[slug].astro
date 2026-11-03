@@ -1,6 +1,8 @@
 ---
 import Base from '../../layouts/Base.astro';
 import Hero from '../../components/Hero.astro';
+import Services from '../../components/Services.astro';
+import Gallery from '../../components/Gallery.astro';
 import Location from '../../components/Location.astro';
 import Footer from '../../components/Footer.astro';
 import WhatsAppFloat from '../../components/WhatsAppFloat.astro';
@@ -23,7 +25,9 @@ const supabase = createSupabaseServerClient(Astro);
 
 // A view direta (from('estetica')) devolve zero linhas para quem não está logado:
 // as policies só deixam o dono ver a própria linha. Esta function é security
-// definer e expõe apenas as colunas públicas — criada em supabase-add-slug.sql.
+// definer e expõe as colunas públicas mais as duas listas agregadas em jsonb
+// (servicos e galeria), já na ordem que o cliente montou no painel.
+// Criada em supabase-add-slug.sql e reescrita em supabase-services-gallery.sql.
 const { data, error } = await supabase.rpc('estetica_publica_por_slug', { p_slug: slug });
 
 if (error) {
@@ -47,6 +51,8 @@ const site = siteDaLinhaEstetica(linha);
 
 <Base title={site.business.name} description={site.business.description ?? ''}>
   <Hero site={site} />
+  <Services site={site} />
+  <Gallery site={site} />
   <Location site={site} />
   <Footer site={site} />
   <WhatsAppFloat site={site} />

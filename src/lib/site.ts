@@ -1,11 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ClientData } from './schema';
+import { urlDeImagem } from './urls';
 
 /**
  * O que as partes visuais do site precisam saber sobre um cliente.
  *
- * É um subconjunto de ClientData (data.json) e, ao mesmo tempo, o que a tabela
- * "estetica" consegue entregar hoje. Assim o mesmo Hero.astro serve a página
- * institucional e a página pública de cada cliente.
+ * É um subconjunto de ClientData (data.json) e, ao mesmo tempo, o shape da
+ * linha que a função estetica_publica_por_slug devolve. Assim os mesmos
+ * componentes servem a página institucional e a página pública de cada cliente.
  *
  * Campo obrigatório é só o que a página não tem como desenhar sem: nome, cor e
  * mensagem do WhatsApp. O resto some da tela quando estiver vazio.
@@ -28,12 +31,27 @@ export type SiteData = {
     accentColor: string;
     heroImage?: string | null;
   };
+  services: ServiceItem[];
+  gallery: GalleryItem[];
   legal: {
     privacyPolicyUrl: string;
   };
 };
 
-/** Linha como chega do banco. Nada aqui é confiável até passar pelos adaptadores. */
+export type ServiceItem = {
+  name: string;
+  priceFrom: string | null;
+  description: string | null;
+};
+
+export type GalleryItem = {
+  caption: string;
+  /** src já resolvido, ou null quando não há imagem para mostrar. */
+  before: string | null;
+  after: string | null;
+};
+
+/** Linha como chega do banco (jsonb já virou array pelo cliente do Supabase). */
 export type EsteticaRow = {
   slug_estetica?: string | null;
   nome_negocio?: string | null;
@@ -41,6 +59,8 @@ export type EsteticaRow = {
   instagram?: string | null;
   endereco?: string | null;
   cor_principal?: string | null;
+  servicos?: unknown;
+  galeria?: unknown;
 };
 
 export const COR_ACENTO_PADRAO = '#075E54';
@@ -58,6 +78,12 @@ function corSegura(valor: string | null | undefined): string {
   return typeof valor === 'string' && HEX.test(valor.trim()) ? valor.trim().toLowerCase() : COR_ACENTO_PADRAO;
 }
 
+function texto(valor: unknown): string | null {
+  if (typeof valor !== 'string') return null;
+  const limpo = valor.trim();
+  return limpo === '' ? null : limpo;
+}
+
 /** "hero.jpg" no data.json é relativo à raiz; em /site/<slug> o navegador erro a path. */
 function caminhoAbsoluto(valor: string | null | undefined): string | null {
   if (!valor) return null;
@@ -67,9 +93,60 @@ function caminhoAbsoluto(valor: string | null | undefined): string | null {
   return `/${limpo}`;
 }
 
-function texto(valor: string | null | undefined): string | null {
-  const limpo = (valor ?? '').trim();
-  return limpo === '' ? null : limpo;
+/** Mesma checagem que Gallery.astro fazia: o asset do data.json existe em public/? */
+function assetPublicoExiste(arquivo: string): boolean {
+  return fs.existsSync(path.resolve(process.cwd(), 'public', arquivo));
+}
+
+/** data.json não trava se vier sem as listas; nada aqui é confiável às cegas. */
+function servicesDoClient(client: ClientData): ServiceItem[] {
+  if (!Array.isArray(client.services)) return [];
+
+  return client.services
+    .map((service) => ({
+      name: service.name,
+      priceFrom: texto(service.priceFrom),
+      description: texto(service.description),
+    }))
+    .filter((service) => service.name !== '');
+}
+
+function galeriaDoClient(client: ClientData): GalleryItem[] {
+  if (!Array.isArray(client.gallery)) return [];
+
+  return client.gallery
+    .filter((item) => typeof item.before === 'string' && typeof item.after === 'string')
+    .map((item) => ({
+      caption: item.caption,
+      before: assetPublicoExiste(item.before) ? `/${item.before}` : null,
+      after: assetPublicoExiste(item.after) ? `/${item.after}` : null,
+    }));
+}
+
+/** jsonb do banco -> lista de serviços, item a item, sem confiar em nada. */
+function servicesDaLinha(valor: unknown): ServiceItem[] {
+  if (!Array.isArray(valor)) return [];
+
+  return valor
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item) => ({
+      name: texto(item.nome) ?? '',
+      priceFrom: texto(item.preco),
+      description: texto(item.descricao),
+    }))
+    .filter((service) => service.name !== '');
+}
+
+function galeriaDaLinha(valor: unknown): GalleryItem[] {
+  if (!Array.isArray(valor)) return [];
+
+  return valor
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item) => ({
+      caption: texto(item.legenda) ?? '',
+      before: urlDeImagem(item.antes_url),
+      after: urlDeImagem(item.depois_url),
+    }));
 }
 
 /** Página institucional, alimentada pelo clients/<slug>/data.json. */
@@ -92,6 +169,8 @@ export function siteDeClientData(client: ClientData): SiteData {
       accentColor: corSegura(client.branding.accentColor),
       heroImage: caminhoAbsoluto(client.branding.heroImage),
     },
+    services: servicesDoClient(client),
+    gallery: galeriaDoClient(client),
     legal: {
       privacyPolicyUrl: client.legal.privacyPolicyUrl,
     },
@@ -126,6 +205,8 @@ export function siteDaLinhaEstetica(row: EsteticaRow): SiteData {
       // Sem coluna de imagem no banco: o Hero usa só o degradê sobre o slate-950.
       heroImage: null,
     },
+    services: servicesDaLinha(row.servicos),
+    gallery: galeriaDaLinha(row.galeria),
     legal: {
       privacyPolicyUrl: '/privacidade',
     },
@@ -136,4 +217,10 @@ export function siteDaLinhaEstetica(row: EsteticaRow): SiteData {
 export function waHref(site: SiteData): string | null {
   if (!site.business.whatsapp) return null;
   return `https://wa.me/${site.business.whatsapp}?text=${encodeURIComponent(site.business.whatsappMessage)}`;
+}
+
+/** href de orçamento de um serviço específico, usado pelos cards de Services.astro. */
+export function quoteHref(site: SiteData, serviceName: string): string | null {
+  if (!site.business.whatsapp) return null;
+  return `https://wa.me/${site.business.whatsapp}?text=${encodeURIComponent(`Olá! Quero solicitar um orçamento para ${serviceName}.`)}`;
 }

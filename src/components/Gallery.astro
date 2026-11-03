@@ -1,10 +1,17 @@
 ---
-import fs from 'node:fs';
-import path from 'node:path';
-import { getClientData } from '../lib/client';
+import { type SiteData } from '../lib/site';
 
-const client = getClientData();
-const hasAsset = (file: string) => fs.existsSync(path.resolve(process.cwd(), 'public', file));
+interface Props {
+  site: SiteData;
+}
+
+const { site } = Astro.props;
+
+if (site.gallery.length === 0) {
+  return;
+}
+
+const legendaOu = (item: SiteData['gallery'][number], padrao: string) => (item.caption === '' ? padrao : item.caption);
 ---
 
 <section class="bg-slate-950 py-24 md:py-32">
@@ -15,15 +22,15 @@ const hasAsset = (file: string) => fs.existsSync(path.resolve(process.cwd(), 'pu
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-14">
       {
-        client.gallery.map((item) => (
+        site.gallery.map((item) => (
           <figure class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             <div class="grid grid-cols-1 md:grid-cols-2">
               <div class="relative overflow-hidden group bg-slate-800">
                 {
-                  hasAsset(item.before) ? (
+                  item.before ? (
                     <img
-                      src={`/${item.before}`}
-                      alt={`Antes: ${item.caption}`}
+                      src={item.before}
+                      alt={`Antes: ${legendaOu(item, 'trabalho')}`}
                       class="w-full h-72 md:h-96 object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
                       decoding="async"
@@ -48,10 +55,10 @@ const hasAsset = (file: string) => fs.existsSync(path.resolve(process.cwd(), 'pu
               </div>
               <div class="relative overflow-hidden group bg-slate-800">
                 {
-                  hasAsset(item.after) ? (
+                  item.after ? (
                     <img
-                      src={`/${item.after}`}
-                      alt={`Depois: ${item.caption}`}
+                      src={item.after}
+                      alt={`Depois: ${legendaOu(item, 'trabalho')}`}
                       class="w-full h-72 md:h-96 object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
                       decoding="async"
@@ -75,7 +82,7 @@ const hasAsset = (file: string) => fs.existsSync(path.resolve(process.cwd(), 'pu
                 </span>
               </div>
             </div>
-            <figcaption class="px-6 py-4 text-slate-300">{item.caption}</figcaption>
+            {item.caption !== '' && <figcaption class="px-6 py-4 text-slate-300">{item.caption}</figcaption>}
           </figure>
         ))
       }
