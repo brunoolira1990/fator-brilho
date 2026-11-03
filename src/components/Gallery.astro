@@ -1,12 +1,15 @@
 ---
+import fs from 'node:fs';
+import path from 'node:path';
 import { getClientData } from '../lib/client';
 
 const client = getClientData();
+const hasAsset = (file: string) => fs.existsSync(path.resolve(process.cwd(), 'public', file));
 ---
 
-<section class="bg-slate-950 py-20">
+<section class="bg-slate-950 py-24 md:py-32">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <h2 class="font-display text-4xl md:text-5xl font-bold uppercase tracking-tight text-center">
+    <h2 class="font-display text-4xl md:text-5xl font-bold uppercase tracking-widest text-center">
       Antes e Depois
     </h2>
 
@@ -16,25 +19,57 @@ const client = getClientData();
           <figure class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             <div class="grid grid-cols-1 md:grid-cols-2">
               <div class="relative overflow-hidden group bg-slate-800">
-                <img
-                  src={`/${item.before}`}
-                  alt={`Antes: ${item.caption}`}
-                  class="w-full h-80 object-cover transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
-                  decoding="async"
-                />
+                {
+                  hasAsset(item.before) ? (
+                    <img
+                      src={`/${item.before}`}
+                      alt={`Antes: ${item.caption}`}
+                      class="w-full h-72 md:h-96 object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div class="w-full h-72 md:h-96 flex flex-col items-center justify-center gap-3">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 512 512"
+                        class="w-12 h-12 fill-slate-600"
+                        aria-hidden="true"
+                      >
+                        <path d="M149.1 64.8L138.7 96 64 96C28.7 96 0 124.7 0 160L0 416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64l-74.7 0-10.4-31.2C356.4 45.2 338.1 32 317.4 32L194.6 32c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z" />
+                      </svg>
+                      <span class="text-sm uppercase tracking-widest text-slate-400">Foto em breve</span>
+                    </div>
+                  )
+                }
                 <span class="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-700 text-white">
                   Antes
                 </span>
               </div>
               <div class="relative overflow-hidden group bg-slate-800">
-                <img
-                  src={`/${item.after}`}
-                  alt={`Depois: ${item.caption}`}
-                  class="w-full h-80 object-cover transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
-                  decoding="async"
-                />
+                {
+                  hasAsset(item.after) ? (
+                    <img
+                      src={`/${item.after}`}
+                      alt={`Depois: ${item.caption}`}
+                      class="w-full h-72 md:h-96 object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div class="w-full h-72 md:h-96 flex flex-col items-center justify-center gap-3">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 512 512"
+                        class="w-12 h-12 fill-slate-600"
+                        aria-hidden="true"
+                      >
+                        <path d="M149.1 64.8L138.7 96 64 96C28.7 96 0 124.7 0 160L0 416c0 35.3 28.7 64 64 64l384 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64l-74.7 0-10.4-31.2C356.4 45.2 338.1 32 317.4 32L194.6 32c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z" />
+                      </svg>
+                      <span class="text-sm uppercase tracking-widest text-slate-400">Foto em breve</span>
+                    </div>
+                  )
+                }
                 <span class="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-700 text-white">
                   Depois
                 </span>

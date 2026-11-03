@@ -5,11 +5,11 @@ const client = getClientData();
 const embedSrc = `https://www.google.com/maps?q=${encodeURIComponent(client.business.address)}`;
 ---
 
-<section class="bg-slate-950 py-24">
+<section class="bg-slate-950 py-24 md:py-32">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
       <div>
-        <h2 class="font-display text-4xl font-bold uppercase tracking-tight">Onde estamos</h2>
+        <h2 class="font-display text-4xl font-bold uppercase tracking-widest">Onde estamos</h2>
 
         <p class="text-slate-300 mt-6">{client.business.address}</p>
         <p class="text-slate-400 mt-2">{client.business.hours}</p>
