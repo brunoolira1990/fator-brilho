@@ -1,0 +1,39 @@
+---
+import Base from '../layouts/Base.astro';
+import DashboardForm from '../components/DashboardForm';
+import { createSupabaseServerClient } from '../lib/supabase-ssr';
+
+const supabase = createSupabaseServerClient(Astro);
+const { data } = await supabase.auth.getUser();
+
+if (!data.user) {
+  return Astro.redirect('/login');
+}
+---
+
+<Base title="Painel | Fator Brilho SaaS" description="Área administrativa da sua conta Fator Brilho.">
+  <header class="bg-slate-900 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <span class="font-display text-2xl font-bold uppercase tracking-tight">Fator Brilho SaaS</span>
+
+      <form method="POST" action="/api/logout">
+        <button
+          type="submit"
+          class="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+        >
+          Sair
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <h1 class="font-display text-4xl md:text-5xl font-bold tracking-tight">
+      Olá, {data.user.email}
+    </h1>
+
+    <div class="mt-12">
+      <DashboardForm client:load />
+    </div>
+  </main>
+</Base>

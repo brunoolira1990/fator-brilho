@@ -9,6 +9,8 @@ import Footer from '../components/Footer.astro';
 import WhatsAppFloat from '../components/WhatsAppFloat.astro';
 import { getClientData } from '../lib/client';
 
+export const prerender = true;
+
 const client = getClientData();
 ---
 

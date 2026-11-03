@@ -2,6 +2,8 @@
 import Base from '../layouts/Base.astro';
 import { getClientData } from '../lib/client';
 
+export const prerender = true;
+
 const client = getClientData();
 ---
 

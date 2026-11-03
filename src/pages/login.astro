@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import AuthForm from '../components/AuthForm';
+---
+
+<Base
+  title="Entrar | Fator Brilho"
+  description="Acesse o painel da sua conta Fator Brilho."
+>
+  <main class="min-h-[80vh] flex items-center justify-center px-4 py-16">
+    <AuthForm client:load />
+  </main>
+</Base>
