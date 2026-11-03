@@ -1,0 +1,53 @@
+---
+import Base from '../../layouts/Base.astro';
+import Hero from '../../components/Hero.astro';
+import Location from '../../components/Location.astro';
+import Footer from '../../components/Footer.astro';
+import WhatsAppFloat from '../../components/WhatsAppFloat.astro';
+import { createSupabaseServerClient } from '../../lib/supabase-ssr';
+import { siteDaLinhaEstetica, type EsteticaRow } from '../../lib/site';
+
+// Página pública do cliente: SSR de propósito. O conteúdo nasce do banco a cada
+// visita, então não há HTML para pré-gerar no build.
+const slug = (Astro.params.slug ?? '').trim().toLowerCase();
+
+// Só um slug que já poderia ser um link válido chega ao banco. Qualquer outra
+// coisa é "não encontrado" por definição, e a consulta nem acontece.
+const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
+
+if (!SLUG_OK.test(slug)) {
+  return Astro.redirect('/404');
+}
+
+const supabase = createSupabaseServerClient(Astro);
+
+// A view direta (from('estetica')) devolve zero linhas para quem não está logado:
+// as policies só deixam o dono ver a própria linha. Esta function é security
+// definer e expõe apenas as colunas públicas — criada em supabase-add-slug.sql.
+const { data, error } = await supabase.rpc('estetica_publica_por_slug', { p_slug: slug });
+
+if (error) {
+  // Não confundir "esse site não existe" com "o banco está inacessível".
+  console.error('[site] falha ao consultar estética pública:', error.code, error.message);
+  return new Response('Não foi possível carregar este site agora.', {
+    status: 500,
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  });
+}
+
+const linhas = Array.isArray(data) ? (data as EsteticaRow[]) : [];
+const linha = linhas[0];
+
+if (!linha) {
+  return Astro.redirect('/404');
+}
+
+const site = siteDaLinhaEstetica(linha);
+---
+
+<Base title={site.business.name} description={site.business.description ?? ''}>
+  <Hero site={site} />
+  <Location site={site} />
+  <Footer site={site} />
+  <WhatsAppFloat site={site} />
+</Base>

@@ -8,21 +8,23 @@ import Location from '../components/Location.astro';
 import Footer from '../components/Footer.astro';
 import WhatsAppFloat from '../components/WhatsAppFloat.astro';
 import { getClientData } from '../lib/client';
+import { siteDeClientData } from '../lib/site';
 
 export const prerender = true;
 
 const client = getClientData();
+const site = siteDeClientData(client);
 ---
 
 <Base
   title={`${client.business.name} | ${client.business.neighborhood}`}
   description={client.business.description}
 >
-  <Hero />
+  <Hero site={site} />
   <Services />
   <Gallery />
   <Trust />
-  <Location />
-  <Footer />
-  <WhatsAppFloat />
+  <Location site={site} />
+  <Footer site={site} />
+  <WhatsAppFloat site={site} />
 </Base>

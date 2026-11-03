@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SubmitEvent } from 'react';
+import { gerarSlug } from '../lib/slug';
 
 type Campos = {
   nome_negocio: string;
@@ -7,6 +8,7 @@ type Campos = {
   instagram: string;
   endereco: string;
   cor_principal: string;
+  slug_estetica: string;
 };
 
 const CAMPOS_VAZIOS: Campos = {
@@ -15,6 +17,7 @@ const CAMPOS_VAZIOS: Campos = {
   instagram: '',
   endereco: '',
   cor_principal: '#075E54',
+  slug_estetica: '',
 };
 
 const inputClass =
@@ -26,7 +29,29 @@ const rotulos: Record<keyof Campos, string> = {
   instagram: 'Instagram',
   endereco: 'Endereço',
   cor_principal: 'Cor principal',
+  slug_estetica: 'Link do site (slug)',
 };
+
+/**
+ * A mesma shape nos dois sentidos: GET carrega, PUT devolve a linha já normalizada.
+ * Tudo vem do banco como texto livre, então nada aqui é confiável: a linha é
+ * sobreposta aos padrões e a cor só entra se for um #RRGGBB de verdade (o
+ * <input type="color"> trava em qualquer outro valor).
+ */
+function preencherDaLinha(linha: Record<string, unknown>): Campos {
+  const lida = (chave: keyof Campos) => (typeof linha[chave] === 'string' ? (linha[chave] as string) : '');
+  const cor = lida('cor_principal');
+
+  return {
+    ...CAMPOS_VAZIOS,
+    nome_negocio: lida('nome_negocio'),
+    whatsapp: lida('whatsapp'),
+    instagram: lida('instagram'),
+    endereco: lida('endereco'),
+    cor_principal: /^#[\da-f]{6}$/i.test(cor) ? cor : CAMPOS_VAZIOS.cor_principal,
+    slug_estetica: lida('slug_estetica'),
+  };
+}
 
 export default function DashboardForm() {
   const [campos, setCampos] = useState<Campos>(CAMPOS_VAZIOS);
@@ -47,14 +72,8 @@ export default function DashboardForm() {
 
         if (!result.ok) {
           setErro(String(result.error ?? 'Não foi possível carregar seus dados.'));
-        } else if (result.data) {
-          setCampos({
-            nome_negocio: result.data.nome_negocio ?? '',
-            whatsapp: result.data.whatsapp ?? '',
-            instagram: result.data.instagram ?? '',
-            endereco: result.data.endereco ?? '',
-            cor_principal: result.data.cor_principal ?? CAMPOS_VAZIOS.cor_principal,
-          });
+        } else if (result.data && typeof result.data === 'object') {
+          setCampos(preencherDaLinha(result.data));
         }
       } catch {
         if (vivo) setErro('Não foi possível falar com o servidor.');
@@ -90,6 +109,13 @@ export default function DashboardForm() {
         return;
       }
 
+      // O servidor normaliza o slug antes de gravar. Espelhar a linha devolvida
+      // evita que o preview mostre "Estética do Bruno" enquanto o banco guarda
+      // "estetica-do-bruno".
+      if (result.data && typeof result.data === 'object') {
+        setCampos(preencherDaLinha(result.data));
+      }
+
       setMensagem('Salvo com sucesso!');
     } catch {
       setErro('Não foi possível falar com o servidor.');
@@ -102,6 +128,9 @@ export default function DashboardForm() {
     setCampos((atual) => ({ ...atual, [chave]: valor }));
     setMensagem('');
   };
+
+  // Preview usa a mesma função do endpoint: o link mostrado é o link que vai ser salvo.
+  const slugPrevia = gerarSlug(campos.slug_estetica);
 
   if (carregando) {
     return (
@@ -150,6 +179,37 @@ export default function DashboardForm() {
             placeholder="Rua Exemplo, 123 - Moema, São Paulo - SP"
             className={inputClass}
           />
+        </div>
+
+        <div>
+          <label htmlFor="slug_estetica" className="block text-sm text-slate-300 mb-2">
+            {rotulos.slug_estetica}
+          </label>
+          <input
+            id="slug_estetica"
+            type="text"
+            value={campos.slug_estetica}
+            onChange={(event) => atualizar('slug_estetica', event.target.value)}
+            placeholder="estetica-do-bruno"
+            className={inputClass}
+          />
+          {slugPrevia ? (
+            <p className="text-xs text-slate-400 mt-2">
+              Seu site está em{' '}
+              <a
+                href={`/site/${slugPrevia}`}
+                target="_blank"
+                rel="noopener"
+                className="font-mono text-emerald-400 underline hover:text-emerald-300 transition-colors"
+              >
+                /site/{slugPrevia}
+              </a>
+            </p>
+          ) : (
+            <p className="text-xs text-slate-400 mt-2">
+              Pode escrever o nome inteiro que a gente transforma no link. Sem preencher, sua página não fica pública.
+            </p>
+          )}
         </div>
 
         <div>

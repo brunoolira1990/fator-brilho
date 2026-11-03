@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient, json } from '../../lib/supabase-ssr';
+import { gerarSlug, validarSlug } from '../../lib/slug';
 
 const CAMPOS_TEXTO = [
   { chave: 'nome_negocio', rotulo: 'Nome do negócio', max: 120 },
@@ -46,6 +47,21 @@ function normalizar(body: Record<string, unknown>): Validação {
     return { erro: 'Cor principal inválida: use o formato #RRGGBB.' };
   }
   campos.cor_principal = cor.toLowerCase();
+
+  const slugBruto = body.slug_estetica;
+
+  if (slugBruto !== undefined && typeof slugBruto !== 'string') {
+    return { erro: 'Link do site: envie um texto.' };
+  }
+
+  const slug = gerarSlug(slugBruto ?? '');
+  const erroSlug = validarSlug(slug);
+
+  if (erroSlug) {
+    return { erro: erroSlug };
+  }
+
+  campos.slug_estetica = slug === '' ? null : slug;
 
   return { campos };
 }
@@ -100,6 +116,18 @@ export const PUT: APIRoute = async (context) => {
     .single();
 
   if (error) {
+    // Estado entre subir este código e rodar o supabase-add-slug.sql no painel:
+    // a coluna ainda não existe. Merece instrução, não a mensagem do PostgREST.
+    if (error.message.includes('slug_estetica') && /column|schema cache/i.test(error.message)) {
+      return json(500, { ok: false, error: 'O banco ainda não tem a coluna do link. Rode o arquivo supabase-add-slug.sql no SQL Editor do Supabase e salve novamente.' });
+    }
+
+    // 23505 = unique_violation. O index único do slug devolve a mensagem crua do
+    // Postgres; o cliente não precisa ler "estetica_slug_estetica_unique_key".
+    if (error.code === '23505' && error.message.includes('slug_estetica')) {
+      return json(409, { ok: false, error: 'Esse link já pertence a outra estética. Escolha outro e salve novamente.' });
+    }
+
     return json(500, { ok: false, error: error.message });
   }
 
