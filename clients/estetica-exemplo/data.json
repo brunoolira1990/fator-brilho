@@ -1,0 +1,70 @@
+{
+  "slug": "estetica-exemplo",
+  "business": {
+    "name": "Estética Exemplo",
+    "tagline": "Polimento técnico, vitrificação e higienização em Moema",
+    "description": "Acabamento de detalhe para quem trata o carro como patrimônio.",
+    "neighborhood": "Moema",
+    "city": "São Paulo",
+    "address": "Rua Exemplo, 123 - Moema, São Paulo - SP",
+    "mapsUrl": "https://maps.google.com/?q=Rua+Exemplo+123+Moema+SP",
+    "whatsapp": "5511999999999",
+    "whatsappMessage": "Olá! Vim pelo site e quero um orçamento.",
+    "instagram": "https://instagram.com/esteticaexemplo",
+    "hours": "Seg a Sáb, 8h às 18h"
+  },
+  "branding": {
+    "primaryColor": "#0F172A",
+    "accentColor": "#075E54",
+    "logo": "logo.svg",
+    "heroImage": "hero.jpg"
+  },
+  "services": [
+    {
+      "name": "Polimento comercial",
+      "priceFrom": "R$ 275",
+      "description": "Correção leve e brilho."
+    },
+    {
+      "name": "Polimento técnico",
+      "priceFrom": "R$ 500",
+      "description": "Correção de riscos e hologramas."
+    },
+    {
+      "name": "Vitrificação",
+      "priceFrom": "R$ 880",
+      "description": "Proteção cerâmica com garantia."
+    },
+    {
+      "name": "Higienização interna",
+      "priceFrom": "R$ 250",
+      "description": "Limpeza profunda de estofados."
+    }
+  ],
+  "gallery": [
+    {
+      "before": "1-before.jpg",
+      "after": "1-after.jpg",
+      "caption": "Golf GTI — polimento técnico"
+    },
+    {
+      "before": "2-before.jpg",
+      "after": "2-after.jpg",
+      "caption": "Onix — vitrificação"
+    }
+  ],
+  "trust": {
+    "googleRating": "4,9",
+    "googleReviewCount": 37,
+    "googleReviewUrl": "https://g.page/esteticaexemplo",
+    "yearsInBusiness": 5,
+    "ownerName": "Fulano"
+  },
+  "legal": {
+    "privacyPolicyUrl": "/privacidade",
+    "cnpj": null
+  },
+  "tracking": {
+    "whatsappEndpoint": "/wa"
+  }
+}

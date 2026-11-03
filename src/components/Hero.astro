@@ -1,0 +1,37 @@
+---
+import { getClientData } from '../lib/client';
+
+const client = getClientData();
+const waHref = `https://wa.me/${client.business.whatsapp}?text=${encodeURIComponent(client.business.whatsappMessage)}`;
+---
+
+<section class="relative min-h-[85vh] flex items-center justify-center">
+  <div
+    class="absolute inset-0"
+    style={`background-image: url('${client.branding.heroImage}'); background-size: cover; background-position: center;`}
+  ></div>
+
+  <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent"></div>
+
+  <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-20 text-center md:text-left">
+    <p class="text-sm font-semibold uppercase tracking-widest text-slate-300">
+      {client.business.neighborhood}
+    </p>
+
+    <h1 class="font-display text-5xl sm:text-6xl md:text-8xl font-bold uppercase tracking-tighter mt-4">
+      {client.business.name}
+    </h1>
+
+    <p class="text-xl text-slate-300 max-w-2xl mt-6 mx-auto md:mx-0">
+      {client.business.tagline}
+    </p>
+
+    <a
+      href={waHref}
+      class="inline-block mt-10 px-8 py-4 rounded-full text-lg font-bold text-white shadow-xl bg-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--accent),black_18%)] hover:scale-105 transition"
+      style={`--accent: ${client.branding.accentColor}`}
+    >
+      Pedir Orçamento no WhatsApp
+    </a>
+  </div>
+</section>

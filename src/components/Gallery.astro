@@ -1,0 +1,49 @@
+---
+import { getClientData } from '../lib/client';
+
+const client = getClientData();
+---
+
+<section class="bg-slate-950 py-20">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <h2 class="font-display text-4xl md:text-5xl font-bold uppercase tracking-tight text-center">
+      Antes e Depois
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-14">
+      {
+        client.gallery.map((item) => (
+          <figure class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2">
+              <div class="relative overflow-hidden group bg-slate-800">
+                <img
+                  src={`/${item.before}`}
+                  alt={`Antes: ${item.caption}`}
+                  class="w-full h-80 object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <span class="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-700 text-white">
+                  Antes
+                </span>
+              </div>
+              <div class="relative overflow-hidden group bg-slate-800">
+                <img
+                  src={`/${item.after}`}
+                  alt={`Depois: ${item.caption}`}
+                  class="w-full h-80 object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <span class="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-700 text-white">
+                  Depois
+                </span>
+              </div>
+            </div>
+            <figcaption class="px-6 py-4 text-slate-300">{item.caption}</figcaption>
+          </figure>
+        ))
+      }
+    </div>
+  </div>
+</section>

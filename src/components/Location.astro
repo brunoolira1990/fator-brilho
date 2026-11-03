@@ -1,0 +1,37 @@
+---
+import { getClientData } from '../lib/client';
+
+const client = getClientData();
+const embedSrc = `https://www.google.com/maps?q=${encodeURIComponent(client.business.address)}`;
+---
+
+<section class="bg-slate-950 py-24">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div>
+        <h2 class="font-display text-4xl font-bold uppercase tracking-tight">Onde estamos</h2>
+
+        <p class="text-slate-300 mt-6">{client.business.address}</p>
+        <p class="text-slate-400 mt-2">{client.business.hours}</p>
+
+        <a
+          href={client.business.mapsUrl}
+          class="inline-block mt-8 px-6 py-3 rounded-full font-semibold text-white text-base shadow-lg bg-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--accent),black_18%)] hover:scale-105 transition duration-300"
+          style={`--accent: ${client.branding.accentColor}`}
+        >
+          Como chegar
+        </a>
+      </div>
+
+      <iframe
+        src={embedSrc}
+        title={`Mapa: ${client.business.name}`}
+        class="w-full h-80 md:h-full min-h-[20rem] rounded-2xl border border-slate-800"
+        style="border:0"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </div>
+</section>

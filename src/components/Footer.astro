@@ -1,0 +1,40 @@
+---
+import { getClientData } from '../lib/client';
+
+const client = getClientData();
+const waHref = `https://wa.me/${client.business.whatsapp}?text=${encodeURIComponent(client.business.whatsappMessage)}`;
+---
+
+<footer class="bg-slate-950 border-t border-slate-800 py-8">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <p class="font-display text-2xl font-bold uppercase tracking-tight">{client.business.name}</p>
+
+    <nav class="flex flex-wrap gap-x-6 gap-y-2 mt-5">
+      <a href={client.business.instagram} class="text-slate-400 hover:text-white transition-colors">
+        Instagram
+      </a>
+      <a href={waHref} class="text-slate-400 hover:text-white transition-colors">
+        WhatsApp
+      </a>
+      <a href={client.legal.privacyPolicyUrl} class="text-slate-400 hover:text-white transition-colors">
+        Política de Privacidade
+      </a>
+    </nav>
+
+    <p class="text-sm text-slate-400 mt-8">
+      Ícone de estrela por
+      <a
+        href="https://fontawesome.com/license/free"
+        class="underline hover:text-slate-300 transition-colors"
+        rel="license noopener"
+        target="_blank">Font Awesome</a
+      > (<a
+        href="https://creativecommons.org/licenses/by/4.0/"
+        class="underline hover:text-slate-300 transition-colors"
+        rel="license noopener"
+        target="_blank">CC BY 4.0</a
+      >).
+    </p>
+    <p class="text-sm text-slate-400 mt-2">Desenvolvido por Fator Brilho.</p>
+  </div>
+</footer>

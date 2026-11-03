@@ -1,0 +1,111 @@
+---
+import Base from '../layouts/Base.astro';
+import { getClientData } from '../lib/client';
+
+const client = getClientData();
+---
+
+<Base
+  title={`Política de Privacidade | ${client.business.name}`}
+  description={`Como ${client.business.name} trata dados pessoais neste site.`}
+>
+  <main class="max-w-3xl mx-auto py-16 px-4">
+    <h1 class="font-display text-4xl md:text-5xl font-bold uppercase tracking-tight">
+      Política de Privacidade
+    </h1>
+
+    <p class="text-slate-400 mt-3">
+      Última atualização: {new Date().toLocaleDateString('pt-BR')}
+    </p>
+
+    <div class="mt-10 space-y-10 text-slate-300 leading-relaxed">
+      <section>
+        <h2 class="font-display text-2xl font-semibold text-white">1. O que é este site</h2>
+        <p class="mt-4">
+          Este site é uma vitrine institucional de <strong>{client.business.name}</strong>. Ele existe para
+          apresentar serviços, preços, portfólio e formas de contato. Não há cadastro, login, carrinho,
+          pagamento ou formulário a ser preenchido aqui.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-2xl font-semibold text-white">2. Dados que coletamos</h2>
+        <p class="mt-4">
+          Não coletamos dados pessoais por meio deste site. Não instalamos cookies de rastreamento, não
+          utilizamos scripts de análise de comportamento e não mantemos banco de dados de visitantes. Você
+          pode navegar por todas as páginas sem informar nome, telefone, e-mail ou qualquer outro dado.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-2xl font-semibold text-white">3. O que acontece ao clicar em WhatsApp</h2>
+        <p class="mt-4">
+          Os botões de contato deste site abrem o aplicativo ou a web do WhatsApp em outra aba. Ao clicar,
+          você é redirecionado para a plataforma da Meta, que passa a ser a responsável pelo tratamento dos
+          dados daquela conversa em diante. A mensagem pré-preenchida, quando existir, é montada por este
+          site no momento do clique e enviada por você — ela não é lida, guardada nem transmitida a nós por
+          outra via.
+        </p>
+        <p class="mt-4 text-slate-400">
+          Aplicam-se a partir desse ponto os termos e a política de privacidade do WhatsApp/Meta, e não os
+          deste site.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-2xl font-semibold text-white">4. Serviços externos carregados pela página</h2>
+        <p class="mt-4">
+          Embora não coletemos dados, este site carrega recursos de terceiros, e o seu navegador se conecta
+          diretamente a eles:
+        </p>
+        <ul class="list-disc pl-6 mt-4 space-y-2 text-slate-400">
+          <li>
+            Fontes (Inter e Oswald), servidas pelo Google Fonts. O seu endereço IP fica visível aos
+            servidores do Google nessa requisição.
+          </li>
+          <li>
+            O mapa exibido na seção "Onde estamos" é incorporado do Google Maps. O conteúdo incorporado
+            pode definir cookies no contexto do próprio Google.
+          </li>
+        </ul>
+        <p class="mt-4 text-slate-400">
+          Links para Instagram, Google e Google Maps abrem nesses serviços em nova aba, sob as políticas de
+          cada um.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-2xl font-semibold text-white">5. Seus direitos (LGPD)</h2>
+        <p class="mt-4">
+          A Lei nº 13.709/2018 garante a você direitos de confirmação, acesso, correção, anonimização,
+          portabilidade e eliminação de dados pessoais, além da revogação de consentimentos. Como este site
+          não constitui banco de dados de visitantes, não há registros nossos para os quais exercer esses
+          direitos.
+        </p>
+        <p class="mt-4">
+          Se você nos enviou dados por WhatsApp, esses dados estão na sua própria conversa e na plataforma
+          da Meta. Para qualquer solicitação relacionada a <strong>{client.business.name}</strong>, use o
+          canal de contato indicado no site.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="font-display text-2xl font-semibold text-white">6. Responsável</h2>
+        <p class="mt-4">
+          {client.business.name}
+          {client.legal.cnpj ? ` — CNPJ ${client.legal.cnpj}` : ''}
+          <br />
+          {client.business.address}
+        </p>
+        <p class="mt-4 text-sm text-slate-400">
+          Este texto descreve o comportamento deste site na data indicada e não substitui orientação
+          jurídica especializada.
+        </p>
+      </section>
+    </div>
+
+    <a href="/" class="inline-block mt-12 text-emerald-400 hover:text-emerald-300 transition-colors">
+      ← Voltar para o início
+    </a>
+  </main>
+</Base>
