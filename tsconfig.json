@@ -5,7 +5,8 @@
     "**/*"
   ],
   "exclude": [
-    "dist"
+    "dist",
+    "backend-django"
   ],
   "compilerOptions": {
     "jsx": "react-jsx",

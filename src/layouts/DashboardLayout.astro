@@ -1,0 +1,103 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  /** Item marcado como atual na barra lateral. */
+  ativo: 'meu-site' | 'servicos' | 'galeria' | 'configuracoes';
+  /** E-mail da conta. Obrigatório: a API do Django devolve `email` no GET de /api/estetica/. */
+  email: string;
+  title: string;
+  description: string;
+}
+
+const { ativo, email, title, description } = Astro.props;
+
+const itens = [
+  { id: 'meu-site', rotulo: 'Meu site', href: '/dashboard' },
+  { id: 'servicos', rotulo: 'Serviços', href: '/dashboard/servicos' },
+  { id: 'galeria', rotulo: 'Galeria', href: '/dashboard/galeria' },
+  { id: 'configuracoes', rotulo: 'Configurações', href: '/dashboard/configuracoes' },
+] as const;
+
+const classeItem = (id: string) =>
+  id === ativo
+    ? 'shrink-0 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap bg-slate-800 text-slate-50'
+    : 'shrink-0 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap text-slate-400 hover:text-white hover:bg-slate-800 transition-colors';
+---
+
+<Base title={title} description={description}>
+  <div class="lg:pl-72">
+    <aside class="bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 lg:fixed lg:inset-y-0 lg:left-0 lg:w-72 lg:overflow-y-auto">
+      <div class="max-w-7xl mx-auto lg:max-w-none px-4 sm:px-6 lg:px-6 py-4 lg:py-8 flex flex-col lg:min-h-full">
+        <div class="flex items-center justify-between gap-4 lg:block">
+          <a href="/" class="font-display text-xl lg:text-2xl font-bold uppercase tracking-tight">
+            Fator Brilho SaaS
+          </a>
+
+          <button
+            type="button"
+            data-sair
+            class="lg:hidden px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+          >
+            Sair
+          </button>
+        </div>
+
+        <nav aria-label="Menu do painel" class="mt-4 lg:mt-10 flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
+          {
+            itens.map((item) => (
+              <a href={item.href} class:list={[classeItem(item.id)]} aria-current={item.id === ativo ? 'page' : undefined}>
+                {item.rotulo}
+              </a>
+            ))
+          }
+        </nav>
+
+        <div class="hidden lg:block mt-auto pt-10">
+          {
+            email && (
+              <p class="px-4 text-xs text-slate-400 break-words">
+                {email}
+              </p>
+            )
+          }
+          <button
+            type="button"
+            data-sair
+            class="mt-4 px-4 w-full rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
+      <slot />
+    </main>
+  </div>
+</Base>
+
+<script>
+  import { sai } from '../lib/api';
+
+  // O logout deixou de ser `<form method="POST" action="/api/logout">`: a API do Django
+  // exige o cabeçalho `X-Fator-Brilho: 1` em todo método não-seguro (é a defesa de CSRF
+  // dela, ver core/authentication.py), e formulário HTML não envia cabeçalho
+  // customizado — o POST morreria em 403. Sai pela mesma camada do resto da API.
+  //
+  // Se a chamada falhar, o navegador vai embora assim mesmo: o que a tela pode fazer
+  // acabou. O token continua válido no cookie até a API responder, e a próxima visita
+  // ao painel mostra a conta aberta de novo — é por isso que o `/` para onde isto vai
+  // nunca renderiza dado de conta.
+  for (const botao of document.querySelectorAll<HTMLButtonElement>('[data-sair]')) {
+    botao.addEventListener('click', async () => {
+      botao.disabled = true;
+      botao.textContent = 'Saindo…';
+
+      await sai();
+
+      window.location.href = '/';
+    });
+  }
+</script>

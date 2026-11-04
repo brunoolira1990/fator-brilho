@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
 import type { SubmitEvent } from 'react';
 import { gerarSlug } from '../lib/slug';
+import { painel, salvaPainel } from '../lib/api';
 import { LIMITE_GALERIA, LIMITE_SERVICOS } from '../lib/listas';
 
+/**
+ * Os nomes abaixo são os da API do Django (core/serializers.py, EsteticaSerializer),
+ * não os do banco antigo: a coluna que o Supabase chamava `slug_estetica` é `slug`
+ * aqui. Trocar um sem trocar o outro manda o campo silencioso para o `undefined`.
+ */
 type Campos = {
   nome_negocio: string;
   whatsapp: string;
   instagram: string;
   endereco: string;
+  cpf_cnpj: string;
   cor_principal: string;
-  slug_estetica: string;
+  slug: string;
 };
 
 type ServicoEdicao = { nome: string; preco: string; descricao: string };
@@ -20,8 +27,9 @@ const CAMPOS_VAZIOS: Campos = {
   whatsapp: '',
   instagram: '',
   endereco: '',
+  cpf_cnpj: '',
   cor_principal: '#075E54',
-  slug_estetica: '',
+  slug: '',
 };
 
 const SERVICO_VAZIO: ServicoEdicao = { nome: '', preco: '', descricao: '' };
@@ -35,8 +43,9 @@ const rotulos: Record<keyof Campos, string> = {
   whatsapp: 'WhatsApp',
   instagram: 'Instagram',
   endereco: 'Endereço',
+  cpf_cnpj: 'CPF ou CNPJ (para a cobrança)',
   cor_principal: 'Cor principal',
-  slug_estetica: 'Link do site (slug)',
+  slug: 'Link do site (slug)',
 };
 
 /**
@@ -55,8 +64,9 @@ function preencherDaLinha(linha: Record<string, unknown>): Campos {
     whatsapp: lida('whatsapp'),
     instagram: lida('instagram'),
     endereco: lida('endereco'),
+    cpf_cnpj: lida('cpf_cnpj'),
     cor_principal: /^#[\da-f]{6}$/i.test(cor) ? cor : CAMPOS_VAZIOS.cor_principal,
-    slug_estetica: lida('slug_estetica'),
+    slug: lida('slug'),
   };
 }
 
@@ -93,34 +103,29 @@ export default function DashboardForm() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
-  const [pendencia, setPendencia] = useState('');
 
   useEffect(() => {
     let vivo = true;
 
     async function carregar() {
-      try {
-        const response = await fetch('/api/estetica');
-        const result = await response.json();
+      // Sem try/catch: `painel()` não atira e não devolve texto cru — rede caída, CORS
+      // bloqueado e `{ok:false}` da API viram todos a mesma união, com a mensagem que o
+      // cliente lê.
+      const resultado = await painel();
 
-        if (!vivo) return;
+      if (!vivo) return;
 
-        if (!result.ok) {
-          setErro(String(result.error ?? 'Não foi possível carregar seus dados.'));
-        } else {
-          if (result.data && typeof result.data === 'object') {
-            setCampos(preencherDaLinha(result.data));
-          }
-
-          setServicos(servicosDaResposta(result.servicos));
-          setGaleria(galeriaDaResposta(result.galeria));
-
-          if (typeof result.pendencia === 'string') {
-            setPendencia(result.pendencia);
-          }
+      if (!resultado.ok) {
+        // É aqui que aparece "Sessão expirada. Entre novamente para continuar." quando
+        // o token vence com a tela aberta; a API manda o texto, a tela só imprime.
+        setErro(resultado.error);
+      } else {
+        if (resultado.data) {
+          setCampos(preencherDaLinha(resultado.data));
         }
-      } catch {
-        if (vivo) setErro('Não foi possível falar com o servidor.');
+
+        setServicos(servicosDaResposta(resultado.servicos));
+        setGaleria(galeriaDaResposta(resultado.galeria));
       }
 
       if (vivo) setCarregando(false);
@@ -139,35 +144,24 @@ export default function DashboardForm() {
     setErro('');
     setMensagem('');
 
-    try {
-      const response = await fetch('/api/estetica', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...campos, servicos, galeria }),
-      });
-      const result = await response.json();
+    const resultado = await salvaPainel({ ...campos, servicos, galeria });
 
-      if (!result.ok) {
-        setErro(String(result.error ?? 'Falha ao salvar.'));
-        setSalvando(false);
-        return;
-      }
-
-      // O servidor normaliza slug, espaços e hifens e devolve as linhas com id e
-      // ordem. Espelhar a resposta evita que a tela mostre uma coisa e o banco outra.
-      if (result.data && typeof result.data === 'object') {
-        setCampos(preencherDaLinha(result.data));
-      }
-
-      setServicos(servicosDaResposta(result.servicos));
-      setGaleria(galeriaDaResposta(result.galeria));
-      setPendencia(typeof result.pendencia === 'string' ? result.pendencia : '');
-
-      setMensagem('Salvo com sucesso!');
-    } catch {
-      setErro('Não foi possível falar com o servidor.');
+    if (!resultado.ok) {
+      setErro(resultado.error);
+      setSalvando(false);
+      return;
     }
 
+    // O servidor normaliza slug, espaços e hifens e devolve as linhas com id e
+    // ordem. Espelhar a resposta evita que a tela mostre uma coisa e o banco outra.
+    if (resultado.data) {
+      setCampos(preencherDaLinha(resultado.data));
+    }
+
+    setServicos(servicosDaResposta(resultado.servicos));
+    setGaleria(galeriaDaResposta(resultado.galeria));
+
+    setMensagem('Salvo com sucesso!');
     setSalvando(false);
   };
 
@@ -187,7 +181,10 @@ export default function DashboardForm() {
   };
 
   // Preview usa a mesma função do endpoint: o link mostrado é o link que vai ser salvo.
-  const slugPrevia = gerarSlug(campos.slug_estetica);
+  // `gerarSlug` é a cópia em TypeScript do `gerar_slug` de core/limpeza.py — as duas
+  // precisam continuar produzindo o mesmo texto, ou a tela mostra um endereço e o
+  // banco grava outro.
+  const slugPrevia = gerarSlug(campos.slug);
 
   if (carregando) {
     return (
@@ -202,7 +199,7 @@ export default function DashboardForm() {
       <h2 className="font-display text-3xl font-bold uppercase tracking-tight">Dados da sua estética</h2>
 
       <form onSubmit={salvar} className="mt-8 space-y-5">
-        {(['nome_negocio', 'whatsapp', 'instagram'] as const).map((chave) => (
+        {(['nome_negocio', 'whatsapp', 'instagram', 'cpf_cnpj'] as const).map((chave) => (
           <div key={chave}>
             <label htmlFor={chave} className="block text-sm text-slate-300 mb-2">
               {rotulos[chave]}
@@ -210,6 +207,7 @@ export default function DashboardForm() {
             <input
               id={chave}
               type={chave === 'whatsapp' ? 'tel' : 'text'}
+              inputMode={chave === 'cpf_cnpj' ? 'numeric' : undefined}
               value={campos[chave]}
               onChange={(event) => atualizar(chave, event.target.value)}
               placeholder={
@@ -217,10 +215,17 @@ export default function DashboardForm() {
                   ? '5511999999999'
                   : chave === 'instagram'
                     ? 'suaestetica'
-                    : 'Estética do Bruno'
+                    : chave === 'cpf_cnpj'
+                      ? 'Somente números'
+                      : 'Estética do Bruno'
               }
               className={inputClass}
             />
+            {chave === 'cpf_cnpj' ? (
+              <p className="text-xs text-slate-400 mt-2">
+                Pedimos porque a cobrança recorrente no cartão exige CPF ou CNPJ do responsável.
+              </p>
+            ) : null}
           </div>
         ))}
 
@@ -239,14 +244,14 @@ export default function DashboardForm() {
         </div>
 
         <div>
-          <label htmlFor="slug_estetica" className="block text-sm text-slate-300 mb-2">
-            {rotulos.slug_estetica}
+          <label htmlFor="slug" className="block text-sm text-slate-300 mb-2">
+            {rotulos.slug}
           </label>
           <input
-            id="slug_estetica"
+            id="slug"
             type="text"
-            value={campos.slug_estetica}
-            onChange={(event) => atualizar('slug_estetica', event.target.value)}
+            value={campos.slug}
+            onChange={(event) => atualizar('slug', event.target.value)}
             placeholder="estetica-do-bruno"
             className={inputClass}
           />
@@ -442,12 +447,6 @@ export default function DashboardForm() {
             + Adicionar foto
           </button>
         </div>
-
-        {pendencia && (
-          <p role="status" className="text-sm text-amber-300">
-            {pendencia}
-          </p>
-        )}
 
         {erro && (
           <p role="alert" className="text-sm text-red-400">

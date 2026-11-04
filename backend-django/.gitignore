@@ -1,0 +1,20 @@
+# Ambiente e artefatos locais — nada disso vai para o repositório.
+venv/
+__pycache__/
+*.py[cod]
+
+# O banco local de desenvolvimento. O Postgres de produção é o da Marketplace;
+# este arquivo só existe porque o settings cai em SQLite quando não há DATABASE_URL.
+db.sqlite3
+db.sqlite3-journal
+
+# Segredos. `vercel pull` escreve .env.local aqui; jamais commitar.
+.env
+.env.local
+
+# Resultado do collectstatic (a Vercel gera no build e serve do CDN).
+staticfiles/
+
+# Dump dos dados do Supabase, gerado por scripts/exporta_supabase.py.
+# Contém CPF, e-mail e id de cliente do Asaas: é dado de cliente, não código.
+dump/

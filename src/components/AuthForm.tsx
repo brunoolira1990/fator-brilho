@@ -1,49 +1,41 @@
 import { useState } from 'react';
 import type { SubmitEvent } from 'react';
+import { entra, registra } from '../lib/api';
 
-export default function AuthForm() {
+type Props = {
+  /** Rótulo do plano escolhido na vitrine ('Essencial', 'Profissional', 'Premium'); vazio = sem plano. */
+  plano?: string;
+  /** 'cadastro' abre o formulário em modo criação de conta; omitido = login, como em /login. */
+  modo?: 'login' | 'cadastro';
+};
+
+export default function AuthForm({ plano = '', modo = 'login' }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(modo !== 'cadastro');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError('');
-    setMessage('');
 
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+    // Nada de olhar `response.status` aqui: `entra`/`registra` nunca atiram e nunca
+    // devolvem texto cru — o que a tela mostra é sempre o `error` que o Django escreveu
+    // em pt-BR (inclusive nos 401 e nos erros que o DRF gera sozinho).
+    const resultado = isLogin ? await entra(email, password) : await registra(email, password);
 
-    let result: Record<string, unknown>;
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      result = await response.json();
-    } catch {
-      setError('Não foi possível falar com o servidor. Tente novamente.');
+    if (!resultado.ok) {
+      setError(resultado.error);
       setLoading(false);
       return;
     }
 
-    if (!result.ok) {
-      setError(String(result.error ?? 'Não foi possível concluir.'));
-      setLoading(false);
-      return;
-    }
-
-    if (result.needsConfirmation) {
-      setMessage('Criamos sua conta. Confirme o e-mail para entrar.');
-      setLoading(false);
-      return;
-    }
-
+    // Registro e login saem da API com o cookie do token já gravado (HttpOnly,
+    // SameSite=None no domínio da API), então cair no painel não é "suposição": o
+    // GET de /dashboard vai achar a sessão. Não há confirmação de e-mail no Django —
+    // o `needsConfirmation` do Supabase morreu junto com o provedor.
     window.location.href = '/dashboard';
   };
 
@@ -53,7 +45,13 @@ export default function AuthForm() {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full mx-auto shadow-2xl">
       <h1 className="font-display text-4xl font-bold uppercase tracking-tight text-center">
-        {isLogin ? 'Acesse sua conta' : 'Crie sua conta'}
+        {isLogin ? (
+          'Acesse sua conta'
+        ) : plano ? (
+          `Criar conta para o Plano ${plano}`
+        ) : (
+          'Crie sua conta'
+        )}
       </h1>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -82,9 +80,13 @@ export default function AuthForm() {
             type="password"
             required
             autoComplete={isLogin ? 'current-password' : 'new-password'}
+            // 8 é o piso da API (core/serializers.py, validate_senha). No login não
+            // vale bloquear no teclado: conta migrada do Supabase pode ter senha de 6,
+            // e a checagem é da API — se ela negar, a mensagem aparece.
+            minLength={isLogin ? undefined : 8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Mínimo 6 caracteres"
+            placeholder={isLogin ? 'Sua senha' : 'Mínimo 8 caracteres'}
             className={inputClass}
           />
         </div>
@@ -94,8 +96,6 @@ export default function AuthForm() {
             {error}
           </p>
         )}
-
-        {message && <p className="text-sm text-emerald-400">{message}</p>}
 
         <button
           type="submit"
@@ -111,7 +111,6 @@ export default function AuthForm() {
         onClick={() => {
           setIsLogin((value) => !value);
           setError('');
-          setMessage('');
         }}
         className="mt-6 w-full text-center text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
       >

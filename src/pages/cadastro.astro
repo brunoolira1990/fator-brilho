@@ -1,0 +1,19 @@
+---
+import Base from '../layouts/Base.astro';
+import AuthForm from '../components/AuthForm';
+import { nomeDoPlano } from '../lib/planos';
+
+// A whitelist é a mesma do checkout: um ?plano=<qualquer-coisa> vindo da URL não é
+// refletido na tela — cai no título sem plano. Isso protege o título e o <title>
+// de texto arbitrário e evita "Plano <script>" na cara do usuário.
+const plano = nomeDoPlano(Astro.url.searchParams.get('plano'));
+---
+
+<Base
+  title={plano ? `Criar conta | Plano ${plano} | Fator Brilho SaaS` : 'Criar conta | Fator Brilho SaaS'}
+  description="Crie sua conta no Fator Brilho SaaS e monte o site da sua estética em minutos."
+>
+  <div class="min-h-[80vh] flex items-center justify-center px-4 py-16">
+    <AuthForm client:load modo="cadastro" plano={plano ?? ''} />
+  </div>
+</Base>

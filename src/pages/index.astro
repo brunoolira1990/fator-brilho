@@ -1,30 +1,144 @@
 ---
 import Base from '../layouts/Base.astro';
-import Hero from '../components/Hero.astro';
-import Services from '../components/Services.astro';
-import Gallery from '../components/Gallery.astro';
-import Trust from '../components/Trust.astro';
-import Location from '../components/Location.astro';
-import Footer from '../components/Footer.astro';
-import WhatsAppFloat from '../components/WhatsAppFloat.astro';
-import { getClientData } from '../lib/client';
-import { siteDeClientData } from '../lib/site';
+import { PLANOS } from '../lib/planos';
 
+// Página de vendas da agência. É estática de propósito: quem chega aqui ainda não
+// tem conta nem sessão, então não há motivo para pagar função serverless.
 export const prerender = true;
 
-const client = getClientData();
-const site = siteDeClientData(client);
+// Os planos vêm de src/lib/planos.ts — o mesmo lugar de onde o /api/checkout pega
+// o valor cobrado. A vitrine e a cobrança não podem discordar.
+const planos = PLANOS;
+
+const passos = [
+  {
+    numero: '1',
+    titulo: 'Escolha o plano',
+    texto: 'Compare os três planos abaixo e mande a mensagem pelo WhatsApp. A gente confirma a ativação.',
+  },
+  {
+    numero: '2',
+    titulo: 'Preencha seus dados',
+    texto: 'No painel você cadastra nome, WhatsApp, Instagram, endereço, cor do site, serviços e fotos de antes e depois.',
+  },
+  {
+    numero: '3',
+    titulo: 'Seu site no ar',
+    texto: 'O link /site/do-seu-nome entra no ar na hora, pronto para receber o clique do cliente no botão de orçamento.',
+  },
+];
 ---
 
 <Base
-  title={`${client.business.name} | ${client.business.neighborhood}`}
-  description={client.business.description}
+  title="Fator Brilho SaaS | O site premium que a sua estética automotiva merece"
+  description="Site de uma página com botão de WhatsApp e painel de controle para a sua estética automotiva. Planos a partir de R$ 97 por mês."
 >
-  <Hero site={site} />
-  <Services site={site} />
-  <Gallery site={site} />
-  <Trust />
-  <Location site={site} />
-  <Footer site={site} />
-  <WhatsAppFloat site={site} />
+  <!-- 1) HERO -->
+  <section class="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-900"></div>
+    <div class="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-24 text-center">
+      <p class="text-sm font-semibold uppercase tracking-widest text-slate-400">Fator Brilho SaaS</p>
+      <h1 class="font-display text-4xl sm:text-6xl md:text-7xl font-bold uppercase tracking-tighter mt-5 text-balance">
+        O site premium que a sua estética automotiva merece
+      </h1>
+      <p class="text-lg md:text-2xl text-slate-300 max-w-3xl mx-auto mt-8 text-pretty">
+        Criamos o site da sua estética com botão de WhatsApp para orçamento direto e entregamos um
+        painel de controle para você manter serviços, fotos e dados sempre atualizados.
+      </p>
+      <div class="mt-12">
+        <a
+          href="#precos"
+          class="inline-block px-10 py-4 rounded-full text-lg font-bold text-white shadow-xl bg-[#075E54] hover:bg-[#064a42] hover:scale-105 transition"
+        >
+          Ver Planos
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2) COMO FUNCIONA -->
+  <section id="como-funciona" class="bg-slate-900 py-24 md:py-28">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h2 class="font-display text-4xl md:text-5xl font-bold uppercase tracking-widest text-center">
+        Como Funciona
+      </h2>
+
+      <ol class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-14 list-none">
+        {
+          passos.map((passo) => (
+            <li class="bg-slate-950 border border-slate-800 rounded-2xl p-8">
+              <span class="font-display text-5xl font-bold text-emerald-400 leading-none">{passo.numero}</span>
+              <h3 class="font-display text-2xl font-semibold mt-5">{passo.titulo}</h3>
+              <p class="text-slate-300 mt-3">{passo.texto}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <!-- 3) PREÇOS -->
+  <section id="precos" class="bg-slate-950 py-24 md:py-32 scroll-mt-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h2 class="font-display text-4xl md:text-5xl font-bold uppercase tracking-widest text-center">Planos</h2>
+      <p class="text-lg text-slate-400 text-center mt-5">Todo plano entrega o site público e o painel de controle.</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 mt-16 items-start">
+        {
+          planos.map((plano) => (
+            <div
+              class:list={[
+                'rounded-2xl p-8 flex flex-col border',
+                plano.destaque
+                  ? 'bg-slate-900 border-emerald-400 lg:-translate-y-4 shadow-2xl shadow-emerald-500/10'
+                  : 'bg-slate-900 border-slate-800',
+              ]}
+            >
+              {plano.destaque && (
+                <span class="self-start px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-400 text-slate-950">
+                  Mais Escolhido
+                </span>
+              )}
+
+              <h3 class="font-display text-3xl font-bold uppercase tracking-tight mt-5">{plano.nome}</h3>
+
+              <p class="mt-4">
+                <span class="font-display text-5xl text-emerald-400">{plano.preco}</span>
+                <span class="text-slate-400 text-base">/mês</span>
+              </p>
+
+              <ul class="mt-8 space-y-3 list-none">
+                {plano.itens.map((item) => (
+                  <li class="flex gap-3 text-slate-300">
+                    <span class="text-emerald-400 mt-0.5" aria-hidden="true">
+                      ✓
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <a
+                href={`/cadastro?plano=${plano.slug}`}
+                aria-label={`Assinar o plano ${plano.nome}`}
+                class="block mt-10 w-full py-3 rounded-lg text-center font-bold text-white bg-[#075E54] hover:bg-[#064a42] transition-colors"
+              >
+                Assinar {plano.nome}
+              </a>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 4) FOOTER -->
+  <footer class="bg-slate-950 border-t border-slate-800 py-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+      <p class="font-display text-2xl font-bold uppercase tracking-tight">Fator Brilho SaaS</p>
+      <a href="/privacidade" class="text-slate-400 hover:text-white transition-colors text-sm">
+        Política de Privacidade
+      </a>
+    </div>
+  </footer>
 </Base>

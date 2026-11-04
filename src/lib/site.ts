@@ -6,8 +6,8 @@ import { urlDeImagem } from './urls';
 /**
  * O que as partes visuais do site precisam saber sobre um cliente.
  *
- * É um subconjunto de ClientData (data.json) e, ao mesmo tempo, o shape da
- * linha que a função estetica_publica_por_slug devolve. Assim os mesmos
+ * É um subconjunto de ClientData (data.json) e, ao mesmo tempo, o shape que a página
+ * pública monta a partir da linha de `/api/publico/<slug>/` do Django. Assim os mesmos
  * componentes servem a página institucional e a página pública de cada cliente.
  *
  * Campo obrigatório é só o que a página não tem como desenhar sem: nome, cor e
@@ -51,16 +51,24 @@ export type GalleryItem = {
   after: string | null;
 };
 
-/** Linha como chega do banco (jsonb já virou array pelo cliente do Supabase). */
+/**
+ * Linha como sai de `/api/publico/<slug>/` do Django (core/serializers.py,
+ * PublicoSerializer). Os nomes são os da API, não os do banco antigo: o que o Supabase
+ * chamava `slug_estetica` é `slug`, e a lista de fotos é `galerias`.
+ *
+ * Tudo opcional e `unknown` nas listas de propósito: esta é a borda do sistema, e o
+ * que a tela faz com o que vier é decidido campo a campo abaixo, nunca no pressuposto
+ * de que o servidor sempre manda a mesma shape.
+ */
 export type EsteticaRow = {
-  slug_estetica?: string | null;
+  slug?: string | null;
   nome_negocio?: string | null;
   whatsapp?: string | null;
   instagram?: string | null;
   endereco?: string | null;
   cor_principal?: string | null;
   servicos?: unknown;
-  galeria?: unknown;
+  galerias?: unknown;
 };
 
 export const COR_ACENTO_PADRAO = '#075E54';
@@ -177,7 +185,7 @@ export function siteDeClientData(client: ClientData): SiteData {
   };
 }
 
-/** Página pública do cliente, alimentada pela linha da tabela "estetica". */
+/** Página pública do cliente, alimentada pela linha de `/api/publico/<slug>/`. */
 export function siteDaLinhaEstetica(row: EsteticaRow): SiteData {
   const nome = texto(row.nome_negocio) ?? 'Estética';
   const endereco = texto(row.endereco);
@@ -186,7 +194,7 @@ export function siteDaLinhaEstetica(row: EsteticaRow): SiteData {
   const whatsapp = texto(row.whatsapp);
 
   return {
-    slug: texto(row.slug_estetica) ?? '',
+    slug: texto(row.slug) ?? '',
     business: {
       name: nome,
       // A tabela ainda não tem coluna para esses textos, então a página não os mostra.
@@ -206,7 +214,7 @@ export function siteDaLinhaEstetica(row: EsteticaRow): SiteData {
       heroImage: null,
     },
     services: servicesDaLinha(row.servicos),
-    gallery: galeriaDaLinha(row.galeria),
+    gallery: galeriaDaLinha(row.galerias),
     legal: {
       privacyPolicyUrl: '/privacidade',
     },

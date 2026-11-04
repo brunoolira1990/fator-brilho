@@ -1,0 +1,108 @@
+/*
+Tema do admin (django-jazzmin 3.x, Bootstrap 5.3 + modo dark).
+
+As superfícies abaixo não são chute: foram medidas com getComputedStyle nas páginas
+servidas por este projeto (2026-11-04).
+  corpo da página .... #2b3035   barra de navegação .... #212529
+  texto do tema ...... #dee2e6   link do sidebar ...... rgba(255,255,255,.65)
+
+O verde do produto, #075E54, entra como SUPERFÍCIE (botão, barra ativa, marca), sempre
+com texto branco por cima. Razões em scripts/contraste.py:
+
+  branco sobre #075E54 ....... 7,67:1  (AA e AAA para texto pequeno)
+  branco sobre #064A42 ....... 10,16:1 (hover)
+  branco sobre #053A34 ....... 12,64:1 (pressed)
+  #075E54 sobre #2b3035 ...... 1,74:1  (reprovado: por isso ele NUNCA é cor de texto/link)
+
+Para link e acento sobre o fundo escuro usa-se #34d399, o mesmo emerald-400 das telas
+do cliente: 6,93:1 sobre o corpo e 8,02:1 sobre a barra. teal-400 (#2dd4bf, 7,15) e
+teal-300 (#5eead4, 9,00) também passaram; teal-600 (#0d9488) mediu 3,56 e ficou fora.
+
+O jazzmin 3 não lê mais a chave "colors" das versões antigas, então a cor vai nas
+variáveis do Bootstrap — que é de onde os componentes buscam a cor.
+*/
+
+:root[data-bs-theme="dark"] {
+  --bs-primary: #075e54;
+  --bs-primary-rgb: 7, 94, 84;
+  --bs-link-color: #34d399;
+  --bs-link-color-rgb: 52, 211, 153;
+  --bs-link-hover-color: #5eead4;
+  --bs-link-hover-color-rgb: 94, 234, 212;
+}
+
+/* Botão primário: fundo do produto, texto branco, hover um degrau abaixo. */
+.btn-primary {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: #075e54;
+  --bs-btn-border-color: #075e54;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #064a42;
+  --bs-btn-hover-border-color: #064a42;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #053a34;
+  --bs-btn-active-border-color: #053a34;
+  --bs-btn-disabled-color: #ffffff;
+  --bs-btn-disabled-bg: #075e54;
+  --bs-btn-disabled-border-color: #075e54;
+}
+
+/*
+A linha de salvar do Django não usa btn-primary: "Salvar" vem btn-success (verde
+#198754 do Bootstrap) e "Salvar e adicionar outro" vem btn-info (ciano #0dcaf0).
+Medido na página real. Nenhum dos dois é a marca, então aqui entram como a cor do
+produto (ação principal) e como a superfície neutra da barra (ações secundárias).
+A .deletelink vermelha fica intacta: vermelho aqui significa destruir, e trocar por
+verde seria mentir para quem administra.
+
+O container tem id: #jazzy-actions é onde o template do jazzmin empilha os botões
+(`.submit-row` é o nome do template padrão do Django, que o jazzmin substitui — por
+isso os dois aparecem aqui, e só o primeiro bate na nossa tela).
+*/
+#jazzy-actions .btn-success,
+.submit-row .btn-success,
+.submit-row input[type="submit"].default {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: #075e54;
+  --bs-btn-border-color: #075e54;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #064a42;
+  --bs-btn-hover-border-color: #064a42;
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: #053a34;
+  --bs-btn-active-border-color: #053a34;
+}
+
+#jazzy-actions .btn-info,
+.submit-row .btn-info {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: #343a40;
+  --bs-btn-border-color: #343a40;
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: #2b3035;
+  --bs-btn-hover-border-color: #2b3035;
+}
+
+/* Onde o jazzmin usa a classe "primary" como fundo de bloco. */
+.bg-primary {
+  background-color: #075e54 !important;
+  color: #ffffff;
+}
+
+/* .text-primary herdaria o verde do produto e daria 1,74:1 no corpo escuro. */
+.text-primary {
+  color: #34d399 !important;
+}
+
+/* Item ativo da sidebar e o badge de "hoje" no calendarbox. */
+.nav-sidebar .nav-treeview .nav-link.active,
+.nav-sidebar .nav-link.active {
+  background-color: #075e54;
+  color: #ffffff;
+}
+
+#content-wrapper .module h2,
+#content-wrapper .module caption {
+  background: #075e54;
+  color: #ffffff;
+}

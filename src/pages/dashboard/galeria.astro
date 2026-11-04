@@ -1,0 +1,33 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { exigeSessao } from '../../lib/sessao';
+
+// Mesmo crivo da tela principal: é a API que diz se há sessão (401 -> /login), e uma
+// falha de servidor não se disfarça de "você saiu da conta".
+const acesso = await exigeSessao(Astro);
+
+if ('redirecionar' in acesso) {
+  return acesso.redirecionar;
+}
+
+const { sessao } = acesso;
+---
+
+<DashboardLayout
+  ativo="galeria"
+  email={sessao.email}
+  title="Galeria | Fator Brilho SaaS"
+  description="Gerencie as fotos de antes e depois do seu site."
+>
+  <h1 class="font-display text-4xl md:text-5xl font-bold tracking-tight">Galeria</h1>
+
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-2xl mt-10">
+    <p class="text-slate-50 font-semibold">Esta tela ainda está em construção.</p>
+    <p class="text-slate-300 mt-3">
+      Por enquanto as fotos de antes e depois são cadastradas na seção
+      <a href="/dashboard" class="text-emerald-400 underline hover:text-emerald-300 transition-colors">Galeria</a>
+      de <a href="/dashboard" class="text-emerald-400 underline hover:text-emerald-300 transition-colors">Meu site</a>,
+      e continuam salvas na mesma conta.
+    </p>
+  </div>
+</DashboardLayout>

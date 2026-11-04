@@ -1,11 +1,14 @@
 // Aplica um arquivo .sql no banco do Supabase pela conexão direta
 // (SUPABASE_DB_URL), sem depender de colar nada no painel web.
 //
+// Sem argumento, aplica o arquivo de sempre. Com argumento, aplica o que você
+// indicar: `npm run db:migrate -- supabase-asaas.sql`.
+//
 // O ganho é o controle da execução: o arquivo inteiro vai como um único pedido ao
 // Postgres, que trata isso como transação implícita — se qualquer statement
 // falhar, nada fica aplicado pela metade. E a migração vira algo versionado e
 // repetível (`npm run db:migrate`), não um passo manual na cabeça de alguém.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
@@ -13,7 +16,21 @@ import pg from 'pg';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.resolve(DIR, '..');
-const ARQUIVO_SQL = path.join(RAIZ, 'supabase-services-gallery.sql');
+
+// Um argumento, sempre relativo à raiz do projeto e sempre .sql: o script não vira
+// um leitor de arquivo qualquer fora do repo.
+const PEDIDO = process.argv[2] ?? 'supabase-services-gallery.sql';
+const ARQUIVO_SQL = path.resolve(RAIZ, PEDIDO);
+
+if (!ARQUIVO_SQL.startsWith(RAIZ + path.sep) || !ARQUIVO_SQL.endsWith('.sql')) {
+  console.error(`Passo só um .sql dentro da raiz do projeto. Recebi: ${PEDIDO}`);
+  process.exit(1);
+}
+
+if (!existsSync(ARQUIVO_SQL)) {
+  console.error(`O arquivo não existe: ${path.relative(RAIZ, ARQUIVO_SQL)}`);
+  process.exit(1);
+}
 
 // Caminho absoluto: o .env é lido de onde o script estiver sendo chamado.
 const carregado = dotenv.config({ path: path.join(RAIZ, '.env') });

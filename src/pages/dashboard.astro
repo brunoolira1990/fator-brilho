@@ -1,39 +1,91 @@
 ---
-import Base from '../layouts/Base.astro';
+import DashboardLayout from '../layouts/DashboardLayout.astro';
 import DashboardForm from '../components/DashboardForm';
-import { createSupabaseServerClient } from '../lib/supabase-ssr';
+import AssinaturaPlanos from '../components/AssinaturaPlanos';
+import { exigeSessao } from '../lib/sessao';
+import { waAgencia } from '../lib/agencia';
+import { PLANOS, nomeDoPlano } from '../lib/planos';
 
-const supabase = createSupabaseServerClient(Astro);
-const { data } = await supabase.auth.getUser();
+// Sessão e dados de cobrança vêm da mesma chamada: `/api/estetica/` responde 401 para
+// quem não tem cookie válido, e devolve `plano_ativo` + `cpf_cnpj` para quem tem. Não
+// há um segundo pedido ao banco só para saber quem está logado.
+const acesso = await exigeSessao(Astro);
 
-if (!data.user) {
-  return Astro.redirect('/login');
+if ('redirecionar' in acesso) {
+  return acesso.redirecionar;
 }
+
+const { sessao } = acesso;
+
+// O estado da assinatura é lido da API, não presumido na tela: sem o webhook
+// confirmado o plano fica vazio e o banner oferece os três planos.
+const planoAtivo = nomeDoPlano(sessao.data?.plano_ativo);
+const faltaCpfCnpj = !sessao.data?.cpf_cnpj;
+
+// Eco do redirect do Asaas. Whitelist: ?pagamento=<qualquer-coisa> não vira texto.
+const pagamentoParam = Astro.url.searchParams.get('pagamento');
+const avisoPagamento =
+  pagamentoParam === 'sucesso'
+    ? 'Você voltou do checkout com o pagamento aprovado. O plano aparece como ativo assim que o Asaas confirmar o evento.'
+    : pagamentoParam === 'cancelado'
+      ? 'Você voltou do checkout sem concluir a assinatura. Pode tentar de novo quando quiser.'
+      : null;
 ---
 
-<Base title="Painel | Fator Brilho SaaS" description="Área administrativa da sua conta Fator Brilho.">
-  <header class="bg-slate-900 border-b border-slate-800">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <span class="font-display text-2xl font-bold uppercase tracking-tight">Fator Brilho SaaS</span>
+<DashboardLayout
+  ativo="meu-site"
+  email={sessao.email}
+  title="Painel | Fator Brilho SaaS"
+  description="Área administrativa da sua conta Fator Brilho."
+>
+  {
+    avisoPagamento ? (
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-4 mb-6">
+        <p class="text-slate-300 text-sm">{avisoPagamento}</p>
+      </div>
+    ) : null
+  }
 
-      <form method="POST" action="/api/logout">
-        <button
-          type="submit"
-          class="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
-        >
-          Sair
-        </button>
-      </form>
-    </div>
-  </header>
+  {
+    planoAtivo ? (
+      <div class="bg-slate-900 border border-emerald-400/60 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p class="text-slate-50 font-semibold">Assinatura ativa — Plano {planoAtivo}</p>
+          <p class="text-sm text-slate-300 mt-1">Renova todo mês no cartão.</p>
+        </div>
+        <span class="shrink-0 self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-400 text-slate-950">
+          Pago
+        </span>
+      </div>
+    ) : (
+      <div class="bg-slate-900 border border-amber-300/40 rounded-2xl p-5 flex flex-col gap-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p class="text-slate-50 font-semibold">Sua assinatura está pendente.</p>
+          <a
+            href={waAgencia()}
+            target="_blank"
+            rel="noopener"
+            class="text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            Prefere combinar pelo WhatsApp?
+          </a>
+        </div>
 
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-    <h1 class="font-display text-4xl md:text-5xl font-bold tracking-tight">
-      Olá, {data.user.email}
-    </h1>
+        <AssinaturaPlanos planos={PLANOS} client:load />
 
-    <div class="mt-12">
-      <DashboardForm client:load />
-    </div>
-  </main>
-</Base>
+        {faltaCpfCnpj ? (
+          <p class="text-sm text-slate-300">
+            Antes de assinar, preencha o CPF ou CNPJ em "Dados da sua estética" aqui embaixo — a cobrança recorrente
+            no cartão exige esse dado.
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+
+  <h1 class="font-display text-4xl md:text-5xl font-bold tracking-tight mt-12">Olá, {sessao.email}</h1>
+
+  <div class="mt-12">
+    <DashboardForm client:load />
+  </div>
+</DashboardLayout>

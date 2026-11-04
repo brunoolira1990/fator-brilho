@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path((?!webhooks/).*)",
+      "destination": "https://api-fator-brilho.vercel.app/api/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/publico/:path*",
+      "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "1" }]
+    }
+  ]
+}

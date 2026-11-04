@@ -10,6 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
+    "api:dev": "cd backend-django && venv\\Scripts\\python.exe manage.py runserver 8010",
     "db:migrate": "node scripts/apply-sql.js"
   },
   "dependencies": {

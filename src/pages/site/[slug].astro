@@ -6,14 +6,14 @@ import Gallery from '../../components/Gallery.astro';
 import Location from '../../components/Location.astro';
 import Footer from '../../components/Footer.astro';
 import WhatsAppFloat from '../../components/WhatsAppFloat.astro';
-import { createSupabaseServerClient } from '../../lib/supabase-ssr';
-import { siteDaLinhaEstetica, type EsteticaRow } from '../../lib/site';
+import { sitePublico } from '../../lib/api';
+import { siteDaLinhaEstetica } from '../../lib/site';
 
 // Página pública do cliente: SSR de propósito. O conteúdo nasce do banco a cada
 // visita, então não há HTML para pré-gerar no build.
 const slug = (Astro.params.slug ?? '').trim().toLowerCase();
 
-// Só um slug que já poderia ser um link válido chega ao banco. Qualquer outra
+// Só um slug que já poderia ser um link válido chega à API. Qualquer outra
 // coisa é "não encontrado" por definição, e a consulta nem acontece.
 const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
 
@@ -21,32 +21,33 @@ if (!SLUG_OK.test(slug)) {
   return Astro.redirect('/404');
 }
 
-const supabase = createSupabaseServerClient(Astro);
+// A API pública é a PublicoView do Django: sem login, sem e-mail do dono, sem CPF e
+// sem id do Asaas (cobrado por teste em core/tests.py). O cookie da request não é
+// repassado: não há sessão a manter aqui, e a resposta deste endpoint é cacheada no
+// CDN (Cache-Control vindo da origem) — levar credencial para uma resposta cacheável
+// é exatamente o tipo de coisa que vaza dado de uma conta para a visita seguinte.
+const resultado = await sitePublico(slug, Astro.request.url);
 
-// A view direta (from('estetica')) devolve zero linhas para quem não está logado:
-// as policies só deixam o dono ver a própria linha. Esta function é security
-// definer e expõe as colunas públicas mais as duas listas agregadas em jsonb
-// (servicos e galeria), já na ordem que o cliente montou no painel.
-// Criada em supabase-add-slug.sql e reescrita em supabase-services-gallery.sql.
-const { data, error } = await supabase.rpc('estetica_publica_por_slug', { p_slug: slug });
+if (!resultado.ok) {
+  // 404 tem mensagem própria na API ("Página não encontrada.") e é o único caso em que
+  // "não existe" não é "o servidor está fora do ar".
+  if (resultado.status === 404) {
+    return Astro.redirect('/404');
+  }
 
-if (error) {
-  // Não confundir "esse site não existe" com "o banco está inacessível".
-  console.error('[site] falha ao consultar estética pública:', error.code, error.message);
+  console.error('[site] falha ao consultar estética pública:', resultado.status, resultado.error);
+
   return new Response('Não foi possível carregar este site agora.', {
     status: 500,
     headers: { 'content-type': 'text/plain; charset=utf-8' },
   });
 }
 
-const linhas = Array.isArray(data) ? (data as EsteticaRow[]) : [];
-const linha = linhas[0];
-
-if (!linha) {
+if (!resultado.data) {
   return Astro.redirect('/404');
 }
 
-const site = siteDaLinhaEstetica(linha);
+const site = siteDaLinhaEstetica(resultado.data);
 ---
 
 <Base title={site.business.name} description={site.business.description ?? ''}>
