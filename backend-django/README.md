@@ -207,6 +207,13 @@ Três decisões de projeto, para não parecerem acidente:
   um push. A saída é usar outro e-mail na `DJANGO_SUPERUSER_EMAIL`.
 - **Sem variável não é erro.** O comando sai com código 0. Um deploy sem `DJANGO_*` no
   ambiente não pode deixar de subir por causa de uma variável opcional.
+- **Duas instâncias subindo juntas é caso esperado, tratado.** O `CMD` roda por
+  instância, e o deploy de verificação sobe duas no mesmo segundo (medido: `wh4wl` e
+  `g2j5k` às 02:08:54). As duas passam pela checagem de existência e uma apanha do índice
+  único de `auth_user.username`; isso é capturado, revertido no `transaction.atomic()` e
+  relatado como `já é superusuário, nada a fazer.` no log da perdedora. Um
+  `IntegrityError` de **outra** causa (sem conta correspondente para relatar) vira
+  `CommandError` com explicação, sem traceback.
 
 ### 6. Variáveis no projeto do Astro
 
@@ -352,7 +359,7 @@ conexão passa pelo pool transacional e os `SET` de sessão da ferramenta não s
 ## Gates
 
 ```bash
-venv/Scripts/python.exe manage.py test core   # 90 testes
+venv/Scripts/python.exe manage.py test core   # 92 testes
 venv/Scripts/python.exe manage.py check
 venv/Scripts/python.exe scripts/contraste.py  # contraste WCAG do admin
 ```

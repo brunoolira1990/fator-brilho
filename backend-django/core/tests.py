@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -26,6 +27,7 @@ from django.contrib.auth.hashers import check_password, identify_hasher, make_pa
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import IntegrityError
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -37,6 +39,19 @@ from .models import Estetica, Galeria, Servico
 # O cabeçalho que autoriza método não-seguro. Sem ele, o cookie de token é lido por
 # qualquer <form> de outro site — ver core/authentication.py.
 ASSINADO = {"HTTP_X_FATOR_BRILHO": "1"}
+
+
+@contextmanager
+def _sem_atomic(using=None):
+    """`transaction.atomic()` que não abre savepoint, para os testes de corrida.
+
+    Dentro de um `TestCase` todo trabalho acontece num savepoint por fora; se o comando
+    testado abrir o seu próprio `atomic`, a escrita da "instância irmã" simulada é
+    desfeita junto com o INSERT rejeitado e a releitura não encontra ninguém. Neutralizar
+    só o `atomic` do módulo sob teste deixa a irmã visível, que é o estado real do
+    Postgres em produção.
+    """
+    yield
 
 URL_REGISTRO = "/api/auth/registro/"
 URL_LOGIN = "/api/auth/login/"
@@ -1329,3 +1344,47 @@ class CriaAdminTest(TestCase):
         usuario = User.objects.get(username="dono@exemplo.com")
         self.assertFalse(usuario.is_staff, "deploy não promove ninguém a administrador em silêncio")
         self.assertIn("NÃO foi promovida", erro)
+
+    def test_corrida_do_autoscale_nao_vira_traceback(self):
+        # O CMD roda em toda instância e o deploy de verificação sobe duas juntas (medido
+        # em produção: wh4wl e g2j5k no mesmo segundo). As duas passam pela checagem de
+        # existência e uma apanha do índice único de auth_user.username.
+        #
+        # A irmã é simulada criando a conta de verdade e falhando depois. O `atomic` é
+        # neutralizado no patch porque, dentro do TestCase, o savepoint desfaria a escrita
+        # simulada antes da releitura -- a visibilidade entre conexões do Postgres não é
+        # reproduzível localmente. O que está em prova é o tratamento do erro: a conta da
+        # irmã sobrevive intocada e o comando sai sem exceção.
+        original = User.objects.create_superuser
+
+        def perde_a_corrida(*args, **kwargs):
+            original(username="dono@exemplo.com", email="dono@exemplo.com", password="senha-da-irma")
+            raise IntegrityError('duplicate key value violates unique constraint "auth_user_username_key"')
+
+        with mock.patch("core.management.commands.cria_admin.transaction.atomic", _sem_atomic), mock.patch.object(
+            type(User.objects), "create_superuser", side_effect=perde_a_corrida
+        ):
+            saida, erro = self.roda(
+                {"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "senha-forte-9"}
+            )
+
+        usuario = User.objects.get(username="dono@exemplo.com")
+        self.assertEqual(User.objects.count(), 1)
+        self.assertTrue(usuario.is_superuser)
+        self.assertTrue(usuario.check_password("senha-da-irma"), "a senha da vencedora não foi sobrescrita")
+        self.assertIn("já é superusuário", saida)
+        self.assertEqual(erro, "")
+
+    def test_integrity_error_que_nao_e_corrida_para_com_mensagem(self):
+        # Rejeição sem conta correspondente = problema novo. O comando tem de dizer isso
+        # e sair com código 1, sem traceback: o CMD usa ";", então um erro não contado é
+        # pior que um erro legível.
+        def so_falha(*args, **kwargs):
+            raise IntegrityError('null value in column "email" violates not-null constraint')
+
+        with mock.patch.object(type(User.objects), "create_superuser", side_effect=so_falha):
+            with self.assertRaises(CommandError) as captura:
+                self.roda({"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "senha-forte-9"})
+
+        self.assertIn("não é a corrida do autoscale", str(captura.exception))
+        self.assertEqual(User.objects.count(), 0)
