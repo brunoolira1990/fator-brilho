@@ -1,0 +1,43 @@
+# Imagem do backend Django para o runtime de container da Vercel.
+# Nome obrigatorio: Dockerfile.vercel vence a deteccao automatica de framework
+# (a Vercel detectaria Django pelo manage.py e ignoraria um Dockerfile raiz).
+
+# Base: python:3.13-slim, alinhado com backend-django/.python-version (= 3.13).
+# slim e suficiente porque o requirements.txt usa psycopg2-binary (ja vem com
+# binario), entao nao precisamos de build-essential/libpq-dev para compilar.
+FROM python:3.13-slim
+
+# So o codigo-fonte do projeto; o WORKDIR precisa ser absoluto porque o
+# gerenciador de processos da Vercel pode mudar o diretorio de execucao.
+WORKDIR /app
+
+# Nao escrever .pyc e manter o stdout sem buffer: com um servidor web em
+# primeiro plano, log em tempo real no painel da Vercel vale mais que
+# performance de import.
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Dependencias primeiro para aproveitar o cache de camadas do build.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Copiamos apenas o que o Django precisa em runtime (fatorbrilho/ e core/),
+# em vez de "COPY . .", para que venv/, db.sqlite3, staticfiles/ e .env nao
+# entrem na imagem. Atencao: se nascer um novo diretorio Python na raiz do
+# backend, ele precisa ser adicionado aqui.
+COPY manage.py ./
+COPY fatorbrilho/ ./fatorbrilho/
+COPY core/ ./core/
+
+# SIGTERM: o gunicorn cuida do shutdown sozinho (drena os workers), e o "exec"
+# abaixo faz dele o processo 1 para que o sinal chegue sem passar por shell.
+# Porta 80 e o padrao de trafego do container na Vercel; ${PORT} so entra se o
+# projeto definir a variavel, por isso o fallback :-80.
+# O migrate roda ANTES do servidor (pedido explicito do dono) e com ";" em vez
+# de "&&": se o migrate falhar (ex.: banco fora do ar), o servidor sobe mesmo
+# assim e da pra ver o erro no log em vez de o container morrer em loop.
+# Riscos conhecidos documentados no handoff: migrate concorrente entre
+# instancias do autoscale e SQLite local (sem DATABASE_URL) sendo efemero.
+EXPOSE 80
+
+CMD ["sh", "-c", "python manage.py migrate --noinput; exec gunicorn fatorbrilho.wsgi:application --bind 0.0.0.0:${PORT:-80} --workers 2 --timeout 60 --access-logfile -"]
