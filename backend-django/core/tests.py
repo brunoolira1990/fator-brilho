@@ -13,6 +13,9 @@ por leitura de código:
 
 import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -23,7 +26,7 @@ from django.contrib.auth.hashers import check_password, identify_hasher, make_pa
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
@@ -1167,3 +1170,87 @@ class ImportacaoSupabaseTests(TestCase):
             call_command("importa_supabase", arquivo=str(Path(self.pasta.name) / "nao-tem.json"))
 
         self.assertIn("exporta_supabase", str(captura.exception))
+
+
+class GarantiaDeBancoEmDeploy(SimpleTestCase):
+    """O settings.py não pode aceitar SQLite num deploy.
+
+    A checagem é provada em subprocess porque ela acontece na importação do módulo de
+    settings: dentro do processo de teste o módulo já foi importado uma vez, e recarregá-lo
+    deixaria duas versões de `DATABASES` vivas. Cada subprocess abaixo é o ambiente real de
+    um container recém-criado, com as variáveis fixadas de propósito -- inclusive como
+    string vazia, porque `load_dotenv` não sobrescreve o que já existe no ambiente.
+    """
+
+    RAIZ = Path(settings.BASE_DIR)
+
+    def rode(self, **variaveis: str) -> subprocess.CompletedProcess[str]:
+        ambiente = os.environ.copy()
+        for nome in ("DJANGO_SECRET_KEY", "DATABASE_URL", "DATABASE_URL_UNPOOLED", "DJANGO_BUILD_SEM_BANCO"):
+            ambiente[nome] = ""
+        ambiente.update(variaveis)
+        return subprocess.run(
+            [sys.executable, "manage.py", "check", "--deploy", "--fail-level", "ERROR"],
+            cwd=self.RAIZ,
+            env=ambiente,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+
+    def test_deploy_sem_url_de_banco_recusa_subir(self):
+        # DJANGO_SECRET_KEY definida é o que diz "isto é um deploy": no notebook ela
+        # não existe, e é exatamente assim que o teste local continua em SQLite.
+        resposta = self.rode(DJANGO_SECRET_KEY="segredo-de-teste")
+
+        # returncode != 0 é o que distingue recusar de advertir: com aviso o comando
+        # terminaria em 0 e o container subiria no arquivo errado.
+        self.assertNotEqual(resposta.returncode, 0, resposta.stdout + resposta.stderr)
+        self.assertIn("Deploy sem banco externo", resposta.stderr)
+        self.assertIn("ImproperlyConfigured", resposta.stderr)
+
+    def test_etapa_de_build_sem_banco_e_liberada(self):
+        # É a linha do `RUN collectstatic` do Dockerfile.vercel: o `docker build` não
+        # recebe as variáveis do projeto e collectstatic não abre conexão.
+        resposta = self.rode(DJANGO_SECRET_KEY="segredo-de-teste", DJANGO_BUILD_SEM_BANCO="1")
+
+        self.assertEqual(resposta.returncode, 0, resposta.stdout + resposta.stderr)
+
+    def test_url_de_banco_presente_libera_a_checagem(self):
+        resposta = self.rode(
+            DJANGO_SECRET_KEY="segredo-de-teste",
+            DATABASE_URL="postgres://usuario:senha@host.exemplo:5432/banco",
+        )
+
+        self.assertEqual(resposta.returncode, 0, resposta.stdout + resposta.stderr)
+
+    def test_url_nao_poolada_e_a_escolhida(self):
+        # O pool transacional do Neon não aceita `set_config` de variável de sessão, e o
+        # Django executa isso ao conectar -- por isso a conexão direta vence quando existe.
+        def engine(**variaveis: str) -> str:
+            ambiente = os.environ.copy()
+            for nome in ("DJANGO_SECRET_KEY", "DATABASE_URL", "DATABASE_URL_UNPOOLED"):
+                ambiente[nome] = ""
+            ambiente.update(variaveis)
+            resposta = subprocess.run(
+                [
+                    sys.executable,
+                    "manage.py",
+                    "shell",
+                    "-c",
+                    "from django.conf import settings; print(settings.DATABASES['default']['ENGINE'])",
+                ],
+                cwd=self.RAIZ,
+                env=ambiente,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            self.assertEqual(resposta.returncode, 0, resposta.stdout + resposta.stderr)
+            return resposta.stdout.strip().splitlines()[-1]
+
+        comum = engine(DATABASE_URL="postgres://a:b@pool.exemplo:5432/db", DATABASE_URL_UNPOOLED="")
+        direta = engine(DATABASE_URL="postgres://a:b@pool.exemplo:5432/db", DATABASE_URL_UNPOOLED="postgres://a:b@direta.exemplo:5432/db")
+
+        self.assertTrue(comum.endswith("postgresql"), comum)
+        self.assertEqual(comum, direta, "as duas strings apontam para o mesmo Postgres")

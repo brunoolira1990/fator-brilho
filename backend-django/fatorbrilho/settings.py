@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -110,6 +111,36 @@ WSGI_APPLICATION = "fatorbrilho.wsgi.application"
 # Conexão direta tem limite de clientes por plano — que `conn_max_age=0` ajuda: cada
 # invocação abre e fecha a própria conexão em vez de segurá-la entre execuções.
 _URL_DO_BANCO = "DATABASE_URL_UNPOOLED" if os.getenv("DATABASE_URL_UNPOOLED") else "DATABASE_URL"
+
+# Garantia ativa: o fallback de SQLite acima era silencioso, e silencioso custou caro.
+# Medido em produção em 05/11/2026: sem as variáveis do Neon injetadas, cada instância
+# do container subia um banco novo do zero (o log dizia "Apply all migrations" a cada
+# boot) e o POST /api/auth/registro/ devolvia 201 com `id: 1` para um e-mail que já
+# existia. Ou seja: contas de pagamento escritas num arquivo que morre no scale-to-zero.
+#
+# "Ser um deploy" é decidido por DJANGO_SECRET_KEY, não por DEBUG: DEBUG é falso nos
+# testes (o test runner liga depois da importação), e segredo no notebook ninguém
+# define -- o literal de desenvolvimento da linha do SECRET_KEY acima basta. O teste
+# local continua em SQLite; o container sem banco externo não sobe mais.
+#
+# Exceção única e estreita: a construção da imagem. O `RUN collectstatic` do
+# Dockerfile.vercel acontece dentro do `docker build`, fase em que a Vercel ainda não
+# entrega as variáveis do projeto, e collectstatic não abre conexão com banco. Lá o
+# DJANGO_BUILD_SEM_BANCO=1 é atribuído na própria linha do RUN (nunca via ENV, que
+# persistiria no runtime), então migrate e gunicorn do CMD continuam sujeitos à regra.
+if (
+    not (os.getenv("DATABASE_URL") or os.getenv("DATABASE_URL_UNPOOLED"))
+    and os.getenv("DJANGO_SECRET_KEY")
+    and not _bool("DJANGO_BUILD_SEM_BANCO")
+):
+    raise ImproperlyConfigured(
+        "Deploy sem banco externo: DJANGO_SECRET_KEY está definida, mas nem DATABASE_URL "
+        "nem DATABASE_URL_UNPOOLED chegaram ao ambiente. O SQLite é recusado aqui porque "
+        "o filesystem do container é descartável e os dados dos clientes sumiriam na "
+        "próxima instância. Vincule o banco ao projeto (Storage -> Neon) ou defina a "
+        "variável de conexão. Para uma etapa de build que não toca o banco, use "
+        "DJANGO_BUILD_SEM_BANCO=1."
+    )
 
 DATABASES = {
     "default": dj_database_url.config(

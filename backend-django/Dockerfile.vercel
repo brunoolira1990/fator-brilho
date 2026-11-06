@@ -44,7 +44,12 @@ COPY core/ ./core/
 # DJANGO_DEBUG fica desligado (padrao do settings) e STATIC_ROOT e relativo ao
 # /app da imagem, um diretorio gravavel apenas no build -- exatamente o que
 # queremos.
-RUN python manage.py collectstatic --noinput
+# DJANGO_BUILD_SEM_BANCO=1 so nesta linha: o settings.py recusa SQLite em deploy
+# (sem DATABASE_URL + DJANGO_SECRET_KEY definida ele da ImproperlyConfigured), e o
+# `docker build` ainda nao tem as variaveis do projeto injetadas. collectstatic nao
+# abre conexao com o banco, entao liberar apenas este comando e seguro. Atribuicao
+# inline (e nao ENV) porque ENV permaneceria no runtime e la a checagem e obrigatoria.
+RUN DJANGO_BUILD_SEM_BANCO=1 python manage.py collectstatic --noinput
 
 # SIGTERM: o gunicorn cuida do shutdown sozinho (drena os workers), e o "exec"
 # abaixo faz dele o processo 1 para que o sinal chegue sem passar por shell.
@@ -53,8 +58,14 @@ RUN python manage.py collectstatic --noinput
 # O migrate roda ANTES do servidor (pedido explicito do dono) e com ";" em vez
 # de "&&": se o migrate falhar (ex.: banco fora do ar), o servidor sobe mesmo
 # assim e da pra ver o erro no log em vez de o container morrer em loop.
-# Riscos conhecidos documentados no handoff: migrate concorrente entre
-# instancias do autoscale e SQLite local (sem DATABASE_URL) sendo efemero.
+# O aviso abaixo vem antes do migrate por um motivo pratico: em 05/11/2026 o
+# backend passou um deploy inteiro achando que tinha banco, e o unico sintoma
+# visivel era o `id` voltando a 1. Agora o settings.py recusa SQLite em deploy,
+# entao sem DATABASE_URL o container nem comeca -- e esta linha diz o porque no
+# log, em vez de deixar o ImproperlyConfigured parecer pane da plataforma.
+# Risco remanescente documentado no handoff: migrate concorrente entre instancias
+# do autoscale (o Postgres trava a aplicacao com django_migrations, mas o segundo
+# processo pode esperar ate ~10s no lock).
 EXPOSE 80
 
-CMD ["sh", "-c", "python manage.py migrate --noinput; exec gunicorn fatorbrilho.wsgi:application --bind 0.0.0.0:${PORT:-80} --workers 2 --timeout 60 --access-logfile -"]
+CMD ["sh", "-c", "if [ -z \"$DATABASE_URL\" ] && [ -z \"$DATABASE_URL_UNPOOLED\" ]; then echo 'AVISO: nenhuma DATABASE_URL neste ambiente. O settings.py vai recusar SQLite e o container nao vai subir. Vincule o Neon ao projeto (Storage -> Neon) e redeploye.'; fi; python manage.py migrate --noinput; exec gunicorn fatorbrilho.wsgi:application --bind 0.0.0.0:${PORT:-80} --workers 2 --timeout 60 --access-logfile -"]
