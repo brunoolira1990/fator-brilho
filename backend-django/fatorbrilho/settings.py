@@ -60,6 +60,12 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise imediatamente após o SecurityMiddleware, como manda a doc
+    # oficial: é o posição mais alta possível que ainda vem antes de qualquer
+    # middleware que possa reescrever a URL. No runtime de container da Vercel
+    # nada mais serve /static (o CDN do modelo serverless antigo não existe
+    # aqui), então é ele que responde o CSS/JS do admin a partir do STATIC_ROOT.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     # O mais alto possível, antes do CommonMiddleware, como manda a doc do
     # django-cors-headers: é o que responde o preflight OPTIONS sem tocar na view.
     "corsheaders.middleware.CorsMiddleware",
@@ -149,8 +155,12 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
-# A Vercel roda o collectstatic sozinha quando STATIC_ROOT existe, e serve o resultado
-# do CDN. Sem esta linha o build não sabe para onde copiar.
+# Realidade atual (runtime de container na Vercel): a imagem roda
+# `python manage.py collectstatic --noinput` na construção (Dockerfile.vercel)
+# e o WhiteNoise serve o resultado em /static a cada requisição. O comentário
+# antigo dizia que "a Vercel roda o collectstatic sozinha e serve do CDN" --
+# isso era do modelo serverless e não vale mais; sem o collectstatic na imagem
+# o /admin renderiza sem CSS (404 em /static/admin/css/base.css).
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

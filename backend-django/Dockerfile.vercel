@@ -18,8 +18,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # Dependencias primeiro para aproveitar o cache de camadas do build.
+# O gunicorn nao e mais instalado solto aqui: ele agora e pino no
+# requirements.txt (gunicorn==26.2.0, a versao comprovada em producao),
+# entao "-r requirements.txt" ja traz tudo que a imagem precisa.
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiamos apenas o que o Django precisa em runtime (fatorbrilho/ e core/),
 # em vez de "COPY . .", para que venv/, db.sqlite3, staticfiles/ e .env nao
@@ -28,6 +31,20 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 COPY manage.py ./
 COPY fatorbrilho/ ./fatorbrilho/
 COPY core/ ./core/
+
+# Collectstatic NA CONSTRUCAO da imagem, nao no CMD: no runtime de container a
+# Vercel nao roda collectstatic sozinha (isso era comportamento do antigo modo
+# serverless), e o filesystem das instancias e somente leitura fora de /tmp --
+# rodar no CMD ia dar erro em cada subida. Com o RUN abaixo os estaticos do
+# admin, do Jazzmin e do core (core/static/core/admin/theme.css) ja vao
+# embutidos na imagem e o WhiteNoise os serve de /static em tempo de execucao.
+# Ordem obrigatoria: vem depois do COPY de fatorbrilho/ e core/ porque o
+# collectstatic le settings.py e os diretorio static/ dos apps locais; os
+# estaticos de terceiros ja estao no site-packages instalado acima.
+# DJANGO_DEBUG fica desligado (padrao do settings) e STATIC_ROOT e relativo ao
+# /app da imagem, um diretorio gravavel apenas no build -- exatamente o que
+# queremos.
+RUN python manage.py collectstatic --noinput
 
 # SIGTERM: o gunicorn cuida do shutdown sozinho (drena os workers), e o "exec"
 # abaixo faz dele o processo 1 para que o sinal chegue sem passar por shell.
