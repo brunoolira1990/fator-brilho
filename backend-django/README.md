@@ -59,8 +59,11 @@ em `src/lib/api.ts`. Há também `npm run api:dev` na raiz do repositório, que 
 aqui.
 
 Sem `DATABASE_URL_UNPOOLED` nem `DATABASE_URL` o projeto cai em SQLite (`db.sqlite3`,
-gitignored). É o ambiente de dev esperado; em produção SQLite não serve, porque disco de
-função serverless é efêmero.
+gitignored). É o ambiente de dev esperado. Em produção isso está **bloqueado por código**:
+o `settings.py` levanta `ImproperlyConfigured` quando `DJANGO_SECRET_KEY` existe (o sinal
+de deploy) e nenhuma string de banco chegou, porque o filesystem do container é descartável
+e os dados somem com a instância — foi exatamente o que aconteceu antes do bloqueio (a seção
+"Migrações" acima e os testes em `GarantiaDeBancoEmDeploy`).
 
 ## Deploy na Vercel (pelo painel, sem CLI)
 
@@ -75,23 +78,26 @@ São dois projetos no mesmo repositório. O que separa um do outro é só o Root
    Se a Vercel der outro sufixo (algo como `api-fator-brilho-seunome.vercel.app`),
    **leia o domínio real** em Settings → Domain Names e ajuste a `destination` do
    `vercel.json` do Astro — a linha é aquela, não existe variável que alimente ela.
-4. **Confira o Framework Preset** (Settings → General). Com Root Directory correto ele
-   deve vir Python/Django. Se aparecer `Astro` porque o `package.json` da raiz confundiu
-   a detecção, troque para o preset de Python — a detecção é descrita assim na doc
-   oficial: *"Vercel automatically detects Django projects by locating `manage.py` ... and
-   determines the entrypoint from `WSGI_APPLICATION`"*. Nosso `WSGI_APPLICATION` é
-   `fatorbrilho.wsgi.application` (`settings.py:91`), e só existe WSGI (não há
-   `ASGI_APPLICATION`, porque se houvesse a Vercel usaria o ASGI no lugar).
-5. **Python 3.13** vem de `.python-version` (a Vercel oferece 3.12 como padrão, além de
-   3.13 e 3.14). Localmente seu 3.15 continua igual: o arquivo só é lido pelo build da
-   Vercel — e por `pyenv`/`uv`, se você recriar um ambiente dentro de `backend-django`.
-6. **Estáticos.** Com `STATIC_ROOT` definido (`settings.py:145`) a Vercel roda
-   `collectstatic` sozinha e serve do CDN em `/static/`; a doc é explícita em não chamar
-   `collectstatic` no build. Por isso `staticfiles/` é gitignored.
-7. **Função.** `vercel.json` deste diretório já fixa `maxDuration` de 30s na chave
-   `fatorbrilho/wsgi.py` — o `functions` é indexado pelo caminho do entrypoint **a partir
-   do Root Directory**. Se um dia você mover o Root Directory para a raiz do repositório,
-   a chave passa a ser `backend-django/fatorbrilho/wsgi.py`.
+4. **Framework.** Não é mais detecção: o `Dockerfile.vercel` deste diretório vence a
+   detecção automática de framework (a Vercel preferiria Django pelo `manage.py` e o
+   entrypoint `WSGI_APPLICATION`), e o `vercel.json` declara `{"framework": "container"}`
+   os dois juntos. O que mudou em relação a esta seção, que descrevia o modo serverless:
+   não há mais preset de Python, nem `buildCommand`, nem `functions`.
+5. **Python 3.13** vem de `.python-version`, que é o que a base da imagem usa
+   (`FROM python:3.13-slim`). Localmente seu 3.15 continua igual: o arquivo só é lido pelo
+   build da Vercel — e por `pyenv`/`uv`, se você recriar um ambiente dentro de
+   `backend-django`.
+6. **Estáticos.** Em container a Vercel **não** roda `collectstatic` nem serve do CDN —
+   isso era comportamento do modo serverless. Hoje o `RUN collectstatic --noinput` do
+   `Dockerfile.vercel` embute os arquivos na imagem e o **WhiteNoise** serve `/static` em
+   tempo de execução (com `whitenoise.middleware.WhiteNoiseMiddleware` logo depois do
+   `SecurityMiddleware`, como manda a doc). Foi medido: antes disso o `/admin` subia sem
+   CSS, com 404 em `/static/admin/css/base.css`. `staticfiles/` continua gitignored.
+7. **Processo.** Não há mais `functions`/`maxDuration` no `vercel.json`: o Gunicorn
+   (`gunicorn==26.2.0`, pinado no `requirements.txt`) escuta na porta 80 e o tempo de
+   resposta é o do container, não o limite de uma Serverless Function. O `idle timeout` de
+   produção é ~5 minutos: depois disso a instância morre e o próximo pedido paga o cold
+   start (~5s medidos).
 
 ### 2. Banco Postgres pelo Marketplace
 
@@ -135,49 +141,72 @@ Preencha tudo em **Settings → Environment Variables** antes do primeiro build 
 motivos na seção seguinte). Não existe `PUBLIC_API_URL` aqui nem no projeto Astro — em
 produção a chamada é same-origin por causa da reescrita.
 
-### 4. Migrações: Build Command permanente
+### 4. Migrações: no boot do container
 
-A Vercel não roda `manage.py migrate` por padrão, e sem CLI a alternativa seria copiar a
-string do Neon para a tua máquina e migrar de fora. Não precisa: o `buildCommand` do
-`vercel.json` deste diretório já é
+**Esta seção descrevia o modo serverless (`buildCommand`) e foi reescida.** No runtime de
+container não existe Build Command: o `vercel.json` deste diretório só declara
+`{"framework": "container"}`, e quem manda na subida é o `CMD` do `Dockerfile.vercel`.
 
-```json
-"buildCommand": "python manage.py migrate --noinput"
-```
+A ordem do `CMD` é `aviso → migrate → cria_admin → gunicorn`. O `migrate` roda com
+`;` e não com `&&`: se ele falhar, o servidor sobe mesmo assim e o erro fica legível no
+log em vez de o container entrar em loop de reinício. (Com uma exceção que é bom saber:
+sem `DATABASE_URL` o `settings.py` levanta `ImproperlyConfigured` antes de qualquer
+coisa, e aí o container **não** sobe. É intenção, porque a alternativa medida foi o
+deploy escrever clientes num SQLite que morria a cada instância.)
 
-que roda depois de instalar as dependências e antes do deploy ficar no ar, em todo deploy.
-É idempotente (medido localmente: a segunda rodada devolve `No migrations to apply.`).
+Idempotência confirmada em produção, não só local: a primeira instância de um banco novo
+loga `Applying ... OK` para todas as migrações; toda instância seguinte, em qualquer
+deploy, loga `No migrations to apply.`.
 
-Uma coisa para saber antes de tentar "ajustar" isso pelo painel: a doc de `buildCommand` é
-explícita — *"The `buildCommand` property can be used to override the Build Command in the
-Project Settings dashboard"*. Ou seja, **o arquivo ganha do campo do painel**. O que se
-muda aqui é no `vercel.json` e se faz commit.
-
-O troca-valores honesto: se o Postgres estiver inacessível no momento do build, **o deploy
-falha** em vez de subir com schema velho. Para um produto com tráfego baixo e deploys
-manuais, errar alto é melhor que servir com tabela faltando. Se um dia incomodar, apague a
-linha do `vercel.json` e migre numa hora combinada.
+O preço de rodar no boot e não no build: **cada** instância nova executa o `migrate`, e no
+autoscale duas podem executar juntas. O Postgres serializa pelo lock da tabela
+`django_migrations`, então a segunda fica esperando (segundos) em vez de corromper nada.
 
 ### 5. O primeiro superusuário do /admin
 
-`createsuperuser` é interativo, e não dá para deixá-lo no Build Command permanente: em modo
-`--noinput` ele falha se o usuário já existe (`createsuperuser.py:315` devolve
-`"Error: That username is already taken."`), o que quebraria todo deploy depois do
-primeiro. Então é uma manobra de uma vez só:
+Não dá para usar o `createsuperuser --noinput` oficial dentro do `CMD`: a partir do
+segundo deploy ele devolve `Error: That username is already taken.` e derrubaria a
+subida. Por isso existe `core/management/commands/cria_admin.py`, que o `CMD` chama em
+todo boot e que é **silenciosamente inofensivo** quando não tem nada a fazer.
 
-1. Em Settings → Environment Variables, crie `DJANGO_SUPERUSER_USERNAME`,
-   `DJANGO_SUPERUSER_EMAIL` e `DJANGO_SUPERUSER_PASSWORD` como **Secret**, escopo
-   Production. (Os nomes não são arbitrários: o comando lê `"DJANGO_SUPERUSER_" +
-   USERNAME_FIELD.upper()`, e como não há `AUTH_USER_MODEL` próprio o campo é `username`.)
-2. Edite **este** `vercel.json` (o arquivo manda, não o painel):
+**Você não precisa de `venv` na sua máquina.** O superusuário é criado em produção, pelo
+container:
 
-   ```json
-   "buildCommand": "python manage.py migrate --noinput && python manage.py createsuperuser --noinput"
-   ```
+1. **Settings → Environment Variables** do projeto `api-fator-brilho`, escopo
+   **Production**, tipo **Secret**:
 
-3. Commit, push, deploy. Abra `/admin`, entre com o usuário criado.
-4. Volte a linha para `python manage.py migrate --noinput` e faça novo deploy. Sem o passo
-   4, o próximo build falha com "That username is already taken."
+   | Variável | O que colocar |
+   | --- | --- |
+   | `DJANGO_SUPERUSER_EMAIL` | o e-mail com que você vai entrar no `/admin` |
+   | `DJANGO_SUPERUSER_PASSWORD` | a senha (mínimo 8 caracteres; ela nunca aparece no log) |
+
+2. **Deploy** (commit qualquer, ou Redeploy no painel). O `CMD` roda o comando sozinho.
+
+3. **Leia o resultado** em **Observability → Runtime Logs**, filtrando por `cria_admin:`:
+
+   | Linha no log | O que aconteceu |
+   | --- | --- |
+   | `superusuário dono@exemplo.com criado` | pronto — entre em `https://api-fator-brilho.vercel.app/admin` |
+   | `dono@exemplo.com já é superusuário, nada a fazer` | deploy idempotente, está tudo certo |
+   | `DJANGO_SUPERUSER_EMAIL/DJANGO_SUPERUSER_PASSWORD não definidas` | as variáveis não estão no escopo **Production** |
+   | `já existe como conta comum e NÃO foi promovida` | o e-mail já tem conta do painel; veja logo abaixo |
+
+4. Depois do primeiro acesso, **troque a senha no `/admin`** (Users → você → Change
+   password) e pode apagar `DJANGO_SUPERUSER_PASSWORD` do painel. O comando não reescreve
+   a senha de quem já existe, então nada quebrará nos deploys seguintes.
+
+Três decisões de projeto, para não parecerem acidente:
+
+- **A identidade é o e-mail minúsculizado.** `DJANGO_SUPERUSER_EMAIL=Dono@Exemplo.com`
+  cria a conta `dono@exemplo.com` — a mesma regra do `/api/auth/registro/`, que grava
+  `username=email`. Sem isso coexistiriam duas contas do mesmo dono, uma com staff e
+  outra sem.
+- **Deploy não promove ninguém.** Se o e-mail já tem conta comum criada pelo painel, o
+  comando grava um aviso no **stderr** e não toca em `is_staff`/`is_superuser`. Dar
+  acesso de administrador é decisão de quem escreve a variável, não efeito colateral de
+  um push. A saída é usar outro e-mail na `DJANGO_SUPERUSER_EMAIL`.
+- **Sem variável não é erro.** O comando sai com código 0. Um deploy sem `DJANGO_*` no
+  ambiente não pode deixar de subir por causa de uma variável opcional.
 
 ### 6. Variáveis no projeto do Astro
 
@@ -198,7 +227,7 @@ Nomes como estão em `fatorbrilho/settings.py`. Não coloque segredo neste repos
 | `DJANGO_ALLOWED_HOSTS` | obrigatória | `api-fator-brilho.vercel.app,fator-brilho.vercel.app` — os dois, por motivo explicado logo abaixo |
 | `DATABASE_URL` | **cria sozinha** | string pooled do Postgres do Marketplace — o projeto não lê esta quando existe a de baixo |
 | `DATABASE_URL_UNPOOLED` | **cria sozinha** | string direta; é a que `settings.py` prefere, e é por isso que a integração não deve ser substituída por uma `DATABASE_URL` colada à mão |
-| `DJANGO_SUPERUSER_*` | só no 1º deploy | `USERNAME`/`EMAIL`/`PASSWORD`, usadas pelo `createsuperuser --noinput` da seção 5; depois apague |
+| `DJANGO_SUPERUSER_EMAIL` / `DJANGO_SUPERUSER_PASSWORD` | opcional | usadas pelo `cria_admin` da seção 5, que o `CMD` roda em todo boot. Sem elas o comando só imprime um aviso e sai com 0. O `createsuperuser` oficial **não** serve aqui: dá erro no segundo deploy e derrubaria o container |
 | `SITE_URL` | obrigatória | `https://fator-brilho.vercel.app` — é a base dos links `?pagamento=sucesso/cancelado` do checkout |
 | `ASAAS_API_KEY` | obrigatória | começa com `$`: leia cru, sem `export` de shell (dotenv resolve isso) |
 | `ASAAS_WEBHOOK_TOKEN` | obrigatória | o mesmo token configurado no painel do Asaas |
@@ -323,14 +352,15 @@ conexão passa pelo pool transacional e os `SET` de sessão da ferramenta não s
 ## Gates
 
 ```bash
-venv/Scripts/python.exe manage.py test core   # 80 testes
+venv/Scripts/python.exe manage.py test core   # 90 testes
 venv/Scripts/python.exe manage.py check
 venv/Scripts/python.exe scripts/contraste.py  # contraste WCAG do admin
 ```
 
-A escolha entre as duas strings do banco não tem teste no `test core` (recarregar
-`settings` no meio da suíte derruba o banco de teste). Foi medida na mão, com
-`import fatorbrilho.settings`, nos três casos que existem:
+A escolha entre as duas strings do banco é coberta por `GarantiaDeBancoEmDeploy`, que roda
+cada caso em `subprocess` (recarregar `settings` dentro da suíte derrubaria o banco de
+teste). A tabela abaixo é a medição histórica, feita na mão antes desses testes existirem,
+e continua valendo:
 
 | Ambiente | `_URL_DO_BANCO` | `DATABASES["default"]["ENGINE"]` |
 | --- | --- | --- |
@@ -344,16 +374,22 @@ Na ordem, porque cada item assume o anterior.
 
 **Backend (projeto `api-fator-brilho`)**
 
-1. Root Directory `backend-django` e Framework Preset de Python, não Astro.
-2. Banco do Marketplace criado, com `DATABASE_URL` **e** `DATABASE_URL_UNPOOLED` aparecendo
-   em Settings → Environment Variables (criadas pela integração; não coladas por você).
+1. Root Directory `backend-django`. O Framework Preset não decide mais nada: a presença
+   do `Dockerfile.vercel` vence a detecção (item 4 da seção 1).
+2. Banco do Marketplace criado **e vinculado ao projeto**, com `DATABASE_URL` **e**
+   `DATABASE_URL_UNPOOLED` aparecendo em Settings → Environment Variables (criadas pela
+   integração; não coladas por você). *Vinculado* é a palavra: a integração instalada no
+   time sem projeto selecionado não injeta nada, e o sintoma medido foi o banco voltar a
+   zero a cada instância. Confira com `curl` + dois registros seguidos: os `id` têm de
+   incrementar entre deploys e depois de 6 minutos parado.
 3. Variáveis da tabela preenchidas em Production. `DJANGO_ALLOWED_HOSTS` com os dois hosts.
-4. Deploy. No **Build Output Log** você tem de ver a linha do `migrate`
-   (`python manage.py migrate --noinput`, vinda do `buildCommand`) e `Applying migrations…`
-   ou `No migrations to apply.` Se o build falhar com erro de conexão, o culpado é o
-   `DATABASE_URL_UNPOOLED` ausente ou o IP de fora — não o código.
-5. Superusuário pelo roteiro da seção 5 (Build Command temporário), e **reverter** o Build
-   Command depois.
+4. Deploy. O `migrate` **não** aparece no Build Output Log — ele roda no boot, então vá em
+   **Observability → Runtime Logs** do deployment e procure `Applying ... OK` (banco novo)
+   ou `No migrations to apply.` (todo boot seguinte, inclusive em instância diferente).
+   Se o container não subir com `ImproperlyConfigured`, falta uma das duas strings.
+5. Superusuário pelas duas variáveis da seção 5, com o resultado lido no mesmo
+   Runtime Logs filtrando por `cria_admin:`. Não há mais Build Command temporário para
+   reverter.
 
 ```bash
 curl -s https://api-fator-brilho.vercel.app/api/planos/   # {"ok":true,"planos":[...]}

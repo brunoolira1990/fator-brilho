@@ -66,6 +66,12 @@ RUN DJANGO_BUILD_SEM_BANCO=1 python manage.py collectstatic --noinput
 # Risco remanescente documentado no handoff: migrate concorrente entre instancias
 # do autoscale (o Postgres trava a aplicacao com django_migrations, mas o segundo
 # processo pode esperar ate ~10s no lock).
+# O cria_admin roda depois do migrate (precisa da tabela django.contrib.auth ja
+# existente) e antes do gunicorn. Ele e idempotente de proposito: sem
+# DJANGO_SUPERUSER_EMAIL/PASSWORD no ambiente so imprime um aviso e sai com 0,
+# entao nao ha como quebrar deploy. Nao usamos `createsuperuser --noinput` porque
+# esse sim quebra: devolve "That username is already taken." a partir do segundo
+# deploy (ver core/management/commands/cria_admin.py).
 EXPOSE 80
 
-CMD ["sh", "-c", "if [ -z \"$DATABASE_URL\" ] && [ -z \"$DATABASE_URL_UNPOOLED\" ]; then echo 'AVISO: nenhuma DATABASE_URL neste ambiente. O settings.py vai recusar SQLite e o container nao vai subir. Vincule o Neon ao projeto (Storage -> Neon) e redeploye.'; fi; python manage.py migrate --noinput; exec gunicorn fatorbrilho.wsgi:application --bind 0.0.0.0:${PORT:-80} --workers 2 --timeout 60 --access-logfile -"]
+CMD ["sh", "-c", "if [ -z \"$DATABASE_URL\" ] && [ -z \"$DATABASE_URL_UNPOOLED\" ]; then echo 'AVISO: nenhuma DATABASE_URL neste ambiente. O settings.py vai recusar SQLite e o container nao vai subir. Vincule o Neon ao projeto (Storage -> Neon) e redeploye.'; fi; python manage.py migrate --noinput; python manage.py cria_admin; exec gunicorn fatorbrilho.wsgi:application --bind 0.0.0.0:${PORT:-80} --workers 2 --timeout 60 --access-logfile -"]

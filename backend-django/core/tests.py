@@ -1254,3 +1254,78 @@ class GarantiaDeBancoEmDeploy(SimpleTestCase):
 
         self.assertTrue(comum.endswith("postgresql"), comum)
         self.assertEqual(comum, direta, "as duas strings apontam para o mesmo Postgres")
+
+
+class CriaAdminTest(TestCase):
+    """O superusuário do /admin nasce de variável de ambiente, sem quebrar deploy.
+
+    O que está em jogo aqui não é criar um usuário -- é o comportamento nas bordas: sem
+    variável, com variável incompleta, com a conta já existente e na segunda execução.
+    Cada uma dessas é um deploy que aconteceria de verdade na Vercel, e a que não tem
+    teste é a que quebra o container às 3h.
+    """
+
+    def roda(self, ambiente: dict[str, str] | None = None) -> tuple[str, str]:
+        variaveis = {"DJANGO_SUPERUSER_EMAIL": "", "DJANGO_SUPERUSER_PASSWORD": ""}
+        variaveis.update(ambiente or {})
+        saida, erro = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, variaveis, clear=False):
+            call_command("cria_admin", stdout=saida, stderr=erro)
+        return saida.getvalue(), erro.getvalue()
+
+    def test_cria_superusuario_que_consegue_logar(self):
+        saida, _ = self.roda({"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "senha-forte-9"})
+
+        usuario = User.objects.get(username="dono@exemplo.com")
+        self.assertTrue(usuario.is_staff)
+        self.assertTrue(usuario.is_superuser)
+        self.assertEqual(usuario.email, "dono@exemplo.com")
+        self.assertTrue(usuario.check_password("senha-forte-9"))
+        self.assertIn("criado", saida)
+
+    def test_email_com_maiusculas_nao_vira_segunda_conta(self):
+        # O painel minúsculiza o e-mail antes de usar como username; o comando tem que
+        # bater com essa regra, senão "Dono@Exemplo.com" criaria um segundo usuário.
+        User.objects.create_user(username="dono@exemplo.com", email="dono@exemplo.com", password="senha-forte-9")
+
+        _, erro = self.roda({"DJANGO_SUPERUSER_EMAIL": "Dono@Exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "outra-senha-9"})
+
+        self.assertEqual(User.objects.count(), 1)
+        self.assertIn("já existe", erro)
+
+    def test_sem_variaveis_avisa_e_nao_falha(self):
+        saida, _ = self.roda()
+
+        self.assertEqual(User.objects.count(), 0)
+        self.assertIn("não definidas", saida)
+
+    def test_variavel_incompleta_nao_cria_meio_administrador(self):
+        self.roda({"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com"})
+        self.roda({"DJANGO_SUPERUSER_PASSWORD": "senha-forte-9"})
+
+        self.assertEqual(User.objects.count(), 0)
+
+    def test_segunda_vez_nao_duplica_nem_reescreve_senha(self):
+        ambiente = {"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "senha-forte-9"}
+        self.roda(ambiente)
+        Usuario = User.objects.get(username="dono@exemplo.com")
+        hash_original = Usuario.password
+
+        # Redeploy com a mesma variável, e também com uma senha diferente na mão de
+        # quem só quis consertar o acesso: nenhum dos dois tocava a senha existente.
+        self.roda(ambiente)
+        self.roda({"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "senha-nova-9"})
+
+        usuario = User.objects.get(username="dono@exemplo.com")
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(usuario.password, hash_original)
+        self.assertIn("já é superusuário", self.roda(ambiente)[0])
+
+    def test_conta_comum_existente_nao_e_promovida(self):
+        User.objects.create_user(username="dono@exemplo.com", email="dono@exemplo.com", password="senha-forte-9")
+
+        _, erro = self.roda({"DJANGO_SUPERUSER_EMAIL": "dono@exemplo.com", "DJANGO_SUPERUSER_PASSWORD": "senha-forte-9"})
+
+        usuario = User.objects.get(username="dono@exemplo.com")
+        self.assertFalse(usuario.is_staff, "deploy não promove ninguém a administrador em silêncio")
+        self.assertIn("NÃO foi promovida", erro)
